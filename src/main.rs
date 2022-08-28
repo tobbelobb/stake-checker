@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::fmt;
 
 use clap::{App, Arg};
-use csv::Writer;
+//use csv::Writer;
 use log::{debug, error, info};
 use log4rs;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CMCResponse {
@@ -130,37 +131,45 @@ async fn main() -> Result<(), OneError> {
     }
 
     let mut params = HashMap::new();
-    params.insert("symbol", currency_list.to_string());
+    params.insert("id", "1");
+    params.insert("jsonrpc", "2.0");
+    params.insert("method", "rpc_methods");
 
     let client = reqwest::Client::new();
     let resp = client
-        .get(" https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest")
-        .header("X-CMC_PRO_API_KEY", cmc_pro_api_key)
-        .query(&params)
+        .post("https://rpc.polkadot.io")
+        .json(&json! {{
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "rpc_methods",
+        }})
         .send()
         .await?;
 
-    let currencies = resp.json::<CMCResponse>().await?;
-    let mut wtr = Writer::from_path("prices.csv")?;
-    wtr.write_record(&["Name", "Symbol", "Price", "7DayChange"])?;
+    let ans: Value = resp.json().await?;
+    println!("{}", serde_json::to_string_pretty(&ans).unwrap());
 
-    for (symbol, currency) in currencies.data.into_iter() {
-        wtr.write_record(&[
-            currency.name,
-            symbol.to_owned(),
-            currency.quote.0.get("USD").unwrap().price.to_string(),
-            currency
-                .quote
-                .0
-                .get("USD")
-                .unwrap()
-                .percent_change_7d
-                .to_string(),
-        ])?;
-    }
-    wtr.flush()?;
+    //let currencies = resp.json::<CMCResponse>().await?;
+    //let mut wtr = Writer::from_path("prices.csv")?;
+    //wtr.write_record(&["Name", "Symbol", "Price", "7DayChange"])?;
 
-    info!("Queried {} and wrote CSV file", currency_list);
+    //for (symbol, currency) in currencies.data.into_iter() {
+    //    wtr.write_record(&[
+    //        currency.name,
+    //        symbol.to_owned(),
+    //        currency.quote.0.get("USD").unwrap().price.to_string(),
+    //        currency
+    //            .quote
+    //            .0
+    //            .get("USD")
+    //            .unwrap()
+    //            .percent_change_7d
+    //            .to_string(),
+    //    ])?;
+    //}
+    //wtr.flush()?;
+
+    //info!("Queried {} and wrote CSV file", currency_list);
 
     Ok(())
 }
