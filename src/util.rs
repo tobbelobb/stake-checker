@@ -4,7 +4,7 @@ pub async fn rpc<Params: serde::Serialize>(
     rpc_endpoint: &str,
     method: &str,
     _params: Params,
-) -> Result<Value, reqwest::Error> {
+) -> Result<serde_json::Value, reqwest::Error> {
     let client = reqwest::Client::new();
     let resp = client
         .post(rpc_endpoint)
