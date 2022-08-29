@@ -1,9 +1,10 @@
+use log::info;
 use serde_json::{json, Value};
 
 pub async fn rpc<Params: serde::Serialize>(
     rpc_endpoint: &str,
     method: &str,
-    _params: Params,
+    params: Params,
 ) -> Result<serde_json::Value, reqwest::Error> {
     let client = reqwest::Client::new();
     let resp = client
@@ -12,6 +13,7 @@ pub async fn rpc<Params: serde::Serialize>(
             "id": 1,
             "jsonrpc": "2.0",
             "method": method,
+            "params": params,
         }})
         .send()
         .await?;
