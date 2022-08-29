@@ -6,7 +6,7 @@ use frame_metadata::RuntimeMetadataPrefixed;
 use log::{error, info};
 use log4rs;
 use parity_scale_codec::Decode;
-use sp_core::{crypto::AccountId32, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec, hashing};
+use sp_core::{crypto::AccountId32, crypto::Ss58Codec, hashing};
 
 #[derive(Debug)]
 enum ScError {
@@ -90,12 +90,10 @@ async fn get_balance(rpc_endpoint: &str, polkadot_addr: &str) -> Result<(), ScEr
     let mut storage_key = Vec::new();
     storage_key.extend_from_slice(&hashing::twox_128(module_name.as_bytes()));
     storage_key.extend_from_slice(&hashing::twox_128(storage_name.as_bytes()));
-    storage_key.extend_from_slice(&hashing::twox_128(account_id.as_ref()));
+    storage_key.extend_from_slice(&hashing::blake2_128(account_id.as_ref()));
     storage_key.extend_from_slice(account_id.as_ref());
     let storage_key_hex = format!("0x{}", hex::encode(&storage_key));
     let result_hex = rpc(rpc_endpoint, "state_getStorage", (storage_key_hex,)).await?;
-    println!("{}", result_hex);
-    panic!("");
     let result_scaled = hex::decode(result_hex.as_str().unwrap().trim_start_matches("0x")).unwrap();
 
     type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
