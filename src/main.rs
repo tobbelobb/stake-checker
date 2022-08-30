@@ -18,6 +18,7 @@ enum ScError {
     NoEndpoint,
     NoPolkadotAddr,
     InvalidPolkadotAddr,
+    NoDataFound,
     IO(std::io::Error),
     Reqwest(reqwest::Error),
     Crypto(PublicError),
@@ -37,6 +38,9 @@ impl fmt::Display for ScError {
             }
             ScError::InvalidPolkadotAddr => {
                 write!(f, "Invalid POLKADOT_ADDR set in .env")
+            }
+            ScError::NoDataFound => {
+                write!(f, "Did not find any data. Polkadot address unused?")
             }
             ScError::IO(err) => write!(f, "Error while flushing the file {}", err),
             ScError::Reqwest(err) => write!(f, "Error while fetching data {}", err),
@@ -77,16 +81,14 @@ async fn rpc_methods(rpc_endpoint: &str) -> Result<(), ScError> {
     Ok(())
 }
 
-async fn state_get_metadata(rpc_endpoint: &str) -> Result<(), ScError> {
+async fn state_get_metadata(rpc_endpoint: &str) -> Result<String, ScError> {
     let res = rpc(rpc_endpoint, "state_getMetadata", ()).await?;
     // Decode the hex value into bytes (which are the SCALE encoded metadata details):
     let metadata_hex = res.as_str().unwrap();
     let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
     // Fortunately, we know what type the metadata is, so we are able to decode our SCALEd bytes to it:
     let decoded = RuntimeMetadataPrefixed::decode(&mut metadata_bytes.as_slice()).unwrap();
-    println!("{}", serde_json::to_string_pretty(&decoded).unwrap());
-
-    Ok(())
+    Ok(serde_json::to_string_pretty(&decoded).unwrap())
 }
 
 async fn state_get_storage(
@@ -108,7 +110,11 @@ async fn state_get_storage(
     let storage_key_hex = format!("0x{}", hex::encode(&storage_key));
     let result_hex = rpc(rpc_endpoint, "state_getStorage", (storage_key_hex,)).await?;
 
-    let result_bytes = hex::decode(result_hex.as_str().unwrap().trim_start_matches("0x")).unwrap();
+    let result_str = result_hex.as_str();
+    if result_str.is_none() {
+        return Err(ScError::NoDataFound);
+    }
+    let result_bytes = hex::decode(result_str.unwrap().trim_start_matches("0x")).unwrap();
     Ok(result_bytes)
 }
 
@@ -118,7 +124,7 @@ async fn get_total_issuance(rpc_endpoint: &str) -> Result<u128, ScError> {
     Ok(total_issued)
 }
 
-async fn get_balance(
+async fn get_account_info(
     rpc_endpoint: &str,
     polkadot_addr: &str,
 ) -> Result<PolkadotAccountInfo, ScError> {
@@ -221,9 +227,9 @@ async fn main() -> Result<(), ScError> {
                 .help("Get endpoint chain's total issuance"),
         )
         .arg(
-            Arg::with_name("free_balance")
-                .long("free_balance")
-                .short('f')
+            Arg::with_name("account_info")
+                .long("account_info")
+                .short('a')
                 .takes_value(false)
                 .help("Get account's free balance"),
         )
@@ -239,20 +245,24 @@ async fn main() -> Result<(), ScError> {
         return rpc_methods(&rpc_endpoint).await;
     }
     if matches.is_present("get_metadata") {
-        return state_get_metadata(&rpc_endpoint).await;
+        let metadata = state_get_metadata(&rpc_endpoint).await?;
+        println!("{}", metadata);
     }
     if matches.is_present("total_issuance") {
         let total_issuance = get_total_issuance(&rpc_endpoint).await?;
-        let total_issuance = total_issuance.to_string();
-        println!("Total issued {}", with_decimal_point(&total_issuance));
+        println!(
+            "Total issued {}",
+            with_decimal_point(&total_issuance.to_string())
+        );
     }
-    if matches.is_present("free_balance") {
-        println!("{:?}", get_balance(&rpc_endpoint, &polkadot_addr).await);
+    if matches.is_present("account_info") {
+        println!(
+            "{:?}",
+            get_account_info(&rpc_endpoint, &polkadot_addr).await?
+        );
     }
     if matches.is_present("test") {
-        println!("{}", with_decimal_point("123"));
-        println!("{}", with_decimal_point("90123456789"));
-        println!("{}", with_decimal_point("0123456789"));
+        return Ok(());
     }
 
     Ok(())
