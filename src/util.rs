@@ -1,4 +1,3 @@
-use log::info;
 use serde_json::{json, Value};
 
 pub async fn rpc<Params: serde::Serialize>(

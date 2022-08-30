@@ -3,17 +3,25 @@ use util::rpc;
 
 use clap::{Arg, Command};
 use frame_metadata::RuntimeMetadataPrefixed;
-use log::{error, info};
+use log::error;
 use log4rs;
 use parity_scale_codec::Decode;
-use sp_core::{crypto::AccountId32, crypto::Ss58Codec, hashing};
+use sp_core::{
+    crypto::AccountId32, crypto::PublicError, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec,
+    hashing,
+};
+
+type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
 
 #[derive(Debug)]
 enum ScError {
     NoEndpoint,
     NoPolkadotAddr,
+    InvalidPolkadotAddr,
     IO(std::io::Error),
     Reqwest(reqwest::Error),
+    Crypto(PublicError),
+    Codec(parity_scale_codec::Error),
 }
 
 impl std::error::Error for ScError {}
@@ -22,14 +30,31 @@ impl fmt::Display for ScError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ScError::NoEndpoint => {
-                write!(f, "No RPC endpoint is set via the .env variable.")
+                write!(f, "No RPC_ENDPOINT set in .env")
             }
             ScError::NoPolkadotAddr => {
-                write!(f, "No Polkadot address is set via the .env variable.")
+                write!(f, "No POLKADOT_ADDR set in .env")
+            }
+            ScError::InvalidPolkadotAddr => {
+                write!(f, "Invalid POLKADOT_ADDR set in .env")
             }
             ScError::IO(err) => write!(f, "Error while flushing the file {}", err),
             ScError::Reqwest(err) => write!(f, "Error while fetching data {}", err),
+            ScError::Crypto(err) => write!(f, "Cryptographic error {}", err),
+            ScError::Codec(err) => write!(f, "Codec error {}", err),
         }
+    }
+}
+
+impl From<parity_scale_codec::Error> for ScError {
+    fn from(err: parity_scale_codec::Error) -> ScError {
+        ScError::Codec(err)
+    }
+}
+
+impl From<PublicError> for ScError {
+    fn from(err: PublicError) -> ScError {
+        ScError::Crypto(err)
     }
 }
 
@@ -68,40 +93,98 @@ async fn state_get_storage(
     rpc_endpoint: &str,
     module_name: &str,
     storage_name: &str,
-) -> Result<(), ScError> {
+    polkadot_addr: Option<&str>,
+) -> Result<Vec<u8>, ScError> {
     let mut storage_key = Vec::new();
     storage_key.extend_from_slice(&hashing::twox_128(module_name.as_bytes()));
     storage_key.extend_from_slice(&hashing::twox_128(storage_name.as_bytes()));
+
+    if polkadot_addr.is_some() {
+        let account_id = AccountId32::from_string(polkadot_addr.unwrap()).unwrap();
+        storage_key.extend_from_slice(&hashing::blake2_128(account_id.as_ref()));
+        storage_key.extend_from_slice(account_id.as_ref());
+    }
+
     let storage_key_hex = format!("0x{}", hex::encode(&storage_key));
     let result_hex = rpc(rpc_endpoint, "state_getStorage", (storage_key_hex,)).await?;
 
-    let result_hex_str = result_hex.as_str().unwrap();
-    let result_bytes = hex::decode(result_hex_str.trim_start_matches("0x")).unwrap();
-    let total_issued = u128::decode(&mut result_bytes.as_slice()).unwrap();
-    println!("Total issued {total_issued}");
-    Ok(())
+    let result_bytes = hex::decode(result_hex.as_str().unwrap().trim_start_matches("0x")).unwrap();
+    Ok(result_bytes)
 }
 
-async fn get_balance(rpc_endpoint: &str, polkadot_addr: &str) -> Result<(), ScError> {
-    let module_name = "System";
-    let storage_name = "Account";
-    let account_id = AccountId32::from_string(polkadot_addr).unwrap();
+async fn get_total_issuance(rpc_endpoint: &str) -> Result<u128, ScError> {
+    let result_bytes = state_get_storage(rpc_endpoint, "Balances", "TotalIssuance", None).await?;
+    let total_issued = u128::decode(&mut result_bytes.as_slice())?;
+    Ok(total_issued)
+}
 
-    let mut storage_key = Vec::new();
-    storage_key.extend_from_slice(&hashing::twox_128(module_name.as_bytes()));
-    storage_key.extend_from_slice(&hashing::twox_128(storage_name.as_bytes()));
-    storage_key.extend_from_slice(&hashing::blake2_128(account_id.as_ref()));
-    storage_key.extend_from_slice(account_id.as_ref());
-    let storage_key_hex = format!("0x{}", hex::encode(&storage_key));
-    let result_hex = rpc(rpc_endpoint, "state_getStorage", (storage_key_hex,)).await?;
-    let result_scaled = hex::decode(result_hex.as_str().unwrap().trim_start_matches("0x")).unwrap();
+async fn get_balance(
+    rpc_endpoint: &str,
+    polkadot_addr: &str,
+) -> Result<PolkadotAccountInfo, ScError> {
+    let result_bytes =
+        state_get_storage(rpc_endpoint, "System", "Account", Some(polkadot_addr)).await?;
+    let account_info = PolkadotAccountInfo::decode(&mut result_bytes.as_ref())?;
+    Ok(account_info)
+}
 
-    type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
-    let account_info = PolkadotAccountInfo::decode(&mut result_scaled.as_ref());
-    println!("{:?}", account_info);
+fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
+    let rpc_endpoint = match dotenv::var("RPC_ENDPOINT") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    };
 
-    // account_id.to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into())
-    Ok(())
+    if rpc_endpoint.is_empty() {
+        error!("Empty RPC_ENDPOINT provided in .env file.");
+        return Err(ScError::NoEndpoint);
+    }
+
+    Ok(rpc_endpoint)
+}
+
+fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
+    let addr = match dotenv::var("POLKADOT_ADDR") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    };
+
+    if addr.is_empty() {
+        error!("Empty POLKADOT_ADDR provided in .env file.");
+        return Err(ScError::NoPolkadotAddr);
+    }
+    let account_id = AccountId32::from_string(&addr)?;
+    let back_to_string =
+        account_id.to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into());
+    if addr != back_to_string {
+        error!("Invalid POLKADOT_ADDR provided in .env file.");
+        return Err(ScError::InvalidPolkadotAddr);
+    }
+    Ok(addr)
+}
+
+fn with_decimal_point(string: &str) -> String {
+    const POLKADOT_DECIMAL_PLACES: usize = 10;
+    let len = string.chars().count();
+    if len > POLKADOT_DECIMAL_PLACES {
+        let mut count = 0;
+        string
+            .chars()
+            .map(|c| {
+                count = count + 1;
+                if count == (len - POLKADOT_DECIMAL_PLACES) {
+                    return c.to_string() + ".";
+                } else {
+                    return c.to_string();
+                }
+            })
+            .collect::<String>()
+    } else {
+        let mut pad: String = "".into();
+        for _ in 0..=(POLKADOT_DECIMAL_PLACES - len) {
+            pad.push('0');
+        }
+        with_decimal_point(&(pad + string))
+    }
 }
 
 #[tokio::main]
@@ -109,16 +192,8 @@ async fn main() -> Result<(), ScError> {
     dotenv::dotenv().ok();
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
-    let rpc_endpoint = dotenv::var("RPC_ENDPOINT").expect("RPC endpoint not set");
-    let polkadot_addr = dotenv::var("POLKADOT_ADDR").expect("Polkadot address not set");
-    if rpc_endpoint.is_empty() {
-        error!("Empty RPC endpoint provided! Please set one via the .env file!");
-        return Err(ScError::NoEndpoint);
-    }
-    if polkadot_addr.is_empty() {
-        error!("Empty Polkadot endpoint provided! Please set one via the .env file!");
-        return Err(ScError::NoPolkadotAddr);
-    }
+    let rpc_endpoint = valid_rpc_endpoint_from_env()?;
+    let polkadot_addr = valid_polkadot_addr_from_env()?;
 
     let matches = Command::new("Stake Checker")
         .version("1.0")
@@ -152,6 +227,12 @@ async fn main() -> Result<(), ScError> {
                 .takes_value(false)
                 .help("Get account's free balance"),
         )
+        .arg(
+            Arg::with_name("test")
+                .long("test")
+                .takes_value(false)
+                .help("Just test the binary"),
+        )
         .get_matches();
 
     if matches.is_present("rpc_methods") {
@@ -161,10 +242,18 @@ async fn main() -> Result<(), ScError> {
         return state_get_metadata(&rpc_endpoint).await;
     }
     if matches.is_present("total_issuance") {
-        return state_get_storage(&rpc_endpoint, "Balances", "TotalIssuance").await;
+        let total_issuance = get_total_issuance(&rpc_endpoint).await?;
+        let total_issuance = total_issuance.to_string();
+        println!("Total issued {}", with_decimal_point(&total_issuance));
     }
     if matches.is_present("free_balance") {
-        return get_balance(&rpc_endpoint, &polkadot_addr).await;
+        println!("{:?}", get_balance(&rpc_endpoint, &polkadot_addr).await);
     }
+    if matches.is_present("test") {
+        println!("{}", with_decimal_point("123"));
+        println!("{}", with_decimal_point("90123456789"));
+        println!("{}", with_decimal_point("0123456789"));
+    }
+
     Ok(())
 }

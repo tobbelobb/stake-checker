@@ -19,7 +19,7 @@ log4rs = "1.0"
 log = "0.4"
 hex = "0.4"
 frame-metadata = { version = "15.0.0", features = ["v13"] }
-parity-scale-codec = "3.0.0"
+parity-scale-codec = "3.1.5"
 sp_core = { version = "6.0.0", git = "https://github.com/paritytech/substrate", branch = "master", package = "sp-core" }
 pallet_balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "master", package = "pallet-balances" }
 pallet_system = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "master", package = "frame-system" }
