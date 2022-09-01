@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use util::rpc;
 
@@ -12,6 +13,7 @@ use sp_core::{
 };
 
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
+type DecoderFunction = fn(Vec<u8>) -> Result<u128, ScError>;
 
 #[derive(Debug)]
 enum ScError {
@@ -118,9 +120,14 @@ async fn state_get_storage(
     Ok(result_bytes)
 }
 
+fn decode_as_u128(bytes: Vec<u8>) -> Result<u128, ScError> {
+    let res = u128::decode(&mut bytes.as_slice())?;
+    Ok(res)
+}
+
 async fn get_total_issuance(rpc_endpoint: &str) -> Result<u128, ScError> {
     let result_bytes = state_get_storage(rpc_endpoint, "Balances", "TotalIssuance", None).await?;
-    let total_issued = u128::decode(&mut result_bytes.as_slice())?;
+    let total_issued = decode_as_u128(result_bytes)?;
     Ok(total_issued)
 }
 
@@ -234,10 +241,20 @@ async fn main() -> Result<(), ScError> {
                 .help("Get account's free balance"),
         )
         .arg(
+            Arg::with_name("get_storage")
+                .long("get_storage")
+                .short('g')
+                .takes_value(true)
+                .multiple_values(true)
+                .min_values(2)
+                .max_values(3)
+                .help("Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and <name>. Third argument is optional. The program will try to decode the value before printing, but will print raw bytes if the method+name combination is unknown."),
+        )
+        .arg(
             Arg::with_name("test")
                 .long("test")
                 .takes_value(false)
-                .help("Just test the binary"),
+                .help("Used for development purposes"),
         )
         .get_matches();
 
@@ -260,6 +277,30 @@ async fn main() -> Result<(), ScError> {
             "{:?}",
             get_account_info(&rpc_endpoint, &polkadot_addr).await?
         );
+    }
+    if matches.is_present("get_storage") {
+        let mut known_decoders = HashMap::<String, DecoderFunction>::new();
+        known_decoders.insert("BalancesTotalIssuance".into(), decode_as_u128);
+        let args: Vec<_> = matches
+            .get_many::<String>("get_storage")
+            .expect("Storage module and name are required")
+            .collect();
+
+        let key = args[0].to_owned() + args[1];
+        let res = match args.len() {
+            2 => state_get_storage(&rpc_endpoint, args[0], args[1], None).await?,
+            3 => state_get_storage(&rpc_endpoint, args[0], args[1], Some(args[2])).await?,
+            _ => unreachable!(),
+        };
+
+        let decoder = known_decoders.get(&key);
+        match decoder {
+            Some(f) => {
+                println!("FOUND IT");
+                println!("{:?}", f(res));
+            }
+            None => println!("{:?}", res),
+        }
     }
     if matches.is_present("test") {
         return Ok(());
