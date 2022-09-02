@@ -13,7 +13,7 @@ use sp_core::{
 };
 
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
-type DecoderFunction = fn(Vec<u8>) -> Result<u128, ScError>;
+type Stringifier = fn(Vec<u8>) -> Result<String, ScError>;
 
 #[derive(Debug)]
 enum ScError {
@@ -120,14 +120,39 @@ async fn state_get_storage(
     Ok(result_bytes)
 }
 
-fn decode_as_u128(bytes: Vec<u8>) -> Result<u128, ScError> {
+fn decode_u128(bytes: Vec<u8>) -> Result<u128, ScError> {
     let res = u128::decode(&mut bytes.as_slice())?;
     Ok(res)
 }
 
+fn stringify_encoded_u128(bytes: Vec<u8>) -> Result<String, ScError> {
+    let res: u128 = decode_u128(bytes)?;
+    Ok(format!("{}", res))
+}
+
+fn stringify_encoded_total_issuance(bytes: Vec<u8>) -> Result<String, ScError> {
+    let unpointed_string = stringify_encoded_u128(bytes)?;
+    Ok(format!("{} DOT", (&unpointed_string).with_decimal_point()))
+}
+
+fn stringify_encoded_system_account(bytes: Vec<u8>) -> Result<String, ScError> {
+    let account_info = PolkadotAccountInfo::decode(&mut bytes.as_ref())?;
+    Ok(format!(
+        "Nonce: {}, Consumers: {}, Providers: {}, Sufficients: {}, Free: {} DOT, Reserved: {} DOT, Misc Frozen: {} DOT, Fee Frozen: {} DOT",
+        account_info.nonce,
+        account_info.consumers,
+        account_info.providers,
+        account_info.sufficients,
+        account_info.data.free.with_decimal_point(),
+        account_info.data.reserved.with_decimal_point(),
+        account_info.data.misc_frozen.with_decimal_point(),
+        account_info.data.fee_frozen.with_decimal_point()
+    ))
+}
+
 async fn get_total_issuance(rpc_endpoint: &str) -> Result<u128, ScError> {
     let result_bytes = state_get_storage(rpc_endpoint, "Balances", "TotalIssuance", None).await?;
-    let total_issued = decode_as_u128(result_bytes)?;
+    let total_issued = decode_u128(result_bytes)?;
     Ok(total_issued)
 }
 
@@ -175,28 +200,39 @@ fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
     Ok(addr)
 }
 
-fn with_decimal_point(string: &str) -> String {
-    const POLKADOT_DECIMAL_PLACES: usize = 10;
-    let len = string.chars().count();
-    if len > POLKADOT_DECIMAL_PLACES {
-        let mut count = 0;
-        string
-            .chars()
-            .map(|c| {
-                count = count + 1;
-                if count == (len - POLKADOT_DECIMAL_PLACES) {
-                    return c.to_string() + ".";
-                } else {
-                    return c.to_string();
-                }
-            })
-            .collect::<String>()
-    } else {
-        let mut pad: String = "".into();
-        for _ in 0..=(POLKADOT_DECIMAL_PLACES - len) {
-            pad.push('0');
+trait DecimalPointPuttable {
+    fn with_decimal_point(self) -> String;
+}
+
+impl DecimalPointPuttable for &str {
+    fn with_decimal_point(self) -> String {
+        const POLKADOT_DECIMAL_PLACES: usize = 10;
+        let len = self.chars().count();
+        if len > POLKADOT_DECIMAL_PLACES {
+            let mut count = 0;
+            self.chars()
+                .map(|c| {
+                    count = count + 1;
+                    if count == (len - POLKADOT_DECIMAL_PLACES) {
+                        return c.to_string() + ".";
+                    } else {
+                        return c.to_string();
+                    }
+                })
+                .collect::<String>()
+        } else {
+            let mut pad: String = "".into();
+            for _ in 0..=(POLKADOT_DECIMAL_PLACES - len) {
+                pad.push('0');
+            }
+            (pad + self).with_decimal_point()
         }
-        with_decimal_point(&(pad + string))
+    }
+}
+
+impl DecimalPointPuttable for u128 {
+    fn with_decimal_point(self) -> String {
+        (&format!("{}", self)).with_decimal_point()
     }
 }
 
@@ -268,8 +304,8 @@ async fn main() -> Result<(), ScError> {
     if matches.is_present("total_issuance") {
         let total_issuance = get_total_issuance(&rpc_endpoint).await?;
         println!(
-            "Total issued {}",
-            with_decimal_point(&total_issuance.to_string())
+            "Total issued {} DOT",
+            (&total_issuance.to_string()).with_decimal_point()
         );
     }
     if matches.is_present("account_info") {
@@ -279,27 +315,31 @@ async fn main() -> Result<(), ScError> {
         );
     }
     if matches.is_present("get_storage") {
-        let mut known_decoders = HashMap::<String, DecoderFunction>::new();
-        known_decoders.insert("BalancesTotalIssuance".into(), decode_as_u128);
+        let mut known_stringifiers = HashMap::<String, Stringifier>::new();
+        known_stringifiers.insert(
+            "BalancesTotalIssuance".into(),
+            stringify_encoded_total_issuance,
+        );
+        known_stringifiers.insert("SystemAccount".into(), stringify_encoded_system_account);
         let args: Vec<_> = matches
             .get_many::<String>("get_storage")
             .expect("Storage module and name are required")
             .collect();
 
         let key = args[0].to_owned() + args[1];
-        let res = match args.len() {
+        let bytes = match args.len() {
             2 => state_get_storage(&rpc_endpoint, args[0], args[1], None).await?,
             3 => state_get_storage(&rpc_endpoint, args[0], args[1], Some(args[2])).await?,
             _ => unreachable!(),
         };
 
-        let decoder = known_decoders.get(&key);
-        match decoder {
-            Some(f) => {
-                println!("FOUND IT");
-                println!("{:?}", f(res));
+        let stringifier = known_stringifiers.get(&key);
+        match stringifier {
+            Some(stringify) => {
+                println!("Using formatter");
+                println!("{}", stringify(bytes)?);
             }
-            None => println!("{:?}", res),
+            None => println!("{:?}", bytes),
         }
     }
     if matches.is_present("test") {
