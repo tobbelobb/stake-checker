@@ -12,6 +12,9 @@ use sp_core::{
     hashing,
 };
 
+#[cfg(test)]
+mod tests;
+
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
 type Stringifier = fn(Vec<u8>) -> Result<String, ScError>;
 
