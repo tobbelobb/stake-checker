@@ -1,3 +1,5 @@
 /target
 secret.json
 .env
+polkadot_metadata.json
+polkadot_properties.json

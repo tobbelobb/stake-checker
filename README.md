@@ -1,12 +1,34 @@
 ## stake-checker
 
-### Comments
-What's called "module name" in the code and in Shawn Tabrizi's blog posts,
-are called "storage prefix" in the Polkadot metadata.
+A program that interacts with a Polkadot rpc node.
 
-### Valid Pairs of (Module name, Storage name)
+### Usage
+
+Configure the url of the rpc node, and the polkadot address in an .env file:
+```bash
+echo "POLKADOT_ADDR=<your_address_here>" >> .env
+echo "RPC_ENDPOINT=<url_here>" >> .env
+```
+
+Build the binary and ask what it can do for you:
+```bash
+cargo run -- --help
+```
+
+Do an example query for total issuance on polkadot
+```bash
+cargo run -- --total_issuance
+```
+
+Make the same query but by providing a storage method and a storage name
+```bash
+cargo run -- --get_storage Balances TotalIssuance
+```
+
 
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)
  - [Transparent Keys in Substrate](https://www.shawntabrizi.com/substrate/transparent-keys-in-substrate/)
  - [Polkadot Interaction Examples rs](https://github.com/paritytech/polkadot-interaction-examples-rs)
+ - [subxt: A Library to Submit Extrinsics to a Substrate Node via RPC](https://github.com/paritytech/subxt)
+ - [substrate-api-client: A Rust Lib for Connecting to Substrate RPC Interface via WebSockets](https://github.com/scs/substrate-api-client)

@@ -1,5 +1,7 @@
+#![feature(fs_try_exists)]
 use std::collections::HashMap;
 use std::fmt;
+use std::fs;
 use util::rpc;
 
 use clap::{Arg, Command};
@@ -7,10 +9,12 @@ use frame_metadata::RuntimeMetadataPrefixed;
 use log::error;
 use log4rs;
 use parity_scale_codec::Decode;
+use serde_json;
 use sp_core::{
     crypto::AccountId32, crypto::PublicError, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec,
     hashing,
 };
+type TokenDecimals = usize;
 
 #[cfg(test)]
 mod cli_tests;
@@ -18,7 +22,7 @@ mod cli_tests;
 mod tests;
 
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
-type Stringifier = fn(Vec<u8>) -> Result<String, ScError>;
+type Stringifier = fn(Vec<u8>, TokenDecimals) -> Result<String, ScError>;
 
 #[derive(Debug)]
 enum ScError {
@@ -30,6 +34,7 @@ enum ScError {
     Reqwest(reqwest::Error),
     Crypto(PublicError),
     Codec(parity_scale_codec::Error),
+    Json(serde_json::Error),
 }
 
 impl std::error::Error for ScError {}
@@ -53,7 +58,14 @@ impl fmt::Display for ScError {
             ScError::Reqwest(err) => write!(f, "Error while fetching data {}", err),
             ScError::Crypto(err) => write!(f, "Cryptographic error {}", err),
             ScError::Codec(err) => write!(f, "Codec error {}", err),
+            ScError::Json(err) => write!(f, "Json error {}", err),
         }
+    }
+}
+
+impl From<serde_json::Error> for ScError {
+    fn from(err: serde_json::Error) -> ScError {
+        ScError::Json(err)
     }
 }
 
@@ -98,6 +110,11 @@ async fn state_get_metadata(rpc_endpoint: &str) -> Result<String, ScError> {
     Ok(serde_json::to_string_pretty(&decoded).unwrap())
 }
 
+async fn system_properties(rpc_endpoint: &str) -> Result<String, ScError> {
+    let res = rpc(rpc_endpoint, "system_properties", ()).await?;
+    Ok(serde_json::to_string_pretty(&res).unwrap())
+}
+
 async fn state_get_storage(
     rpc_endpoint: &str,
     module_name: &str,
@@ -135,12 +152,21 @@ fn stringify_encoded_u128(bytes: Vec<u8>) -> Result<String, ScError> {
     Ok(format!("{}", res))
 }
 
-fn stringify_encoded_total_issuance(bytes: Vec<u8>) -> Result<String, ScError> {
+fn stringify_encoded_total_issuance(
+    bytes: Vec<u8>,
+    token_decimals: TokenDecimals,
+) -> Result<String, ScError> {
     let unpointed_string = stringify_encoded_u128(bytes)?;
-    Ok(format!("{} DOT", (&unpointed_string).with_decimal_point()))
+    Ok(format!(
+        "{} DOT",
+        (&unpointed_string).with_decimal_point(token_decimals)
+    ))
 }
 
-fn stringify_encoded_system_account(bytes: Vec<u8>) -> Result<String, ScError> {
+fn stringify_encoded_system_account(
+    bytes: Vec<u8>,
+    decimals: TokenDecimals,
+) -> Result<String, ScError> {
     let account_info = PolkadotAccountInfo::decode(&mut bytes.as_ref())?;
     Ok(format!(
         "Nonce: {}, Consumers: {}, Providers: {}, Sufficients: {}, Free: {} DOT, Reserved: {} DOT, Misc Frozen: {} DOT, Fee Frozen: {} DOT",
@@ -148,10 +174,10 @@ fn stringify_encoded_system_account(bytes: Vec<u8>) -> Result<String, ScError> {
         account_info.consumers,
         account_info.providers,
         account_info.sufficients,
-        account_info.data.free.with_decimal_point(),
-        account_info.data.reserved.with_decimal_point(),
-        account_info.data.misc_frozen.with_decimal_point(),
-        account_info.data.fee_frozen.with_decimal_point()
+        account_info.data.free.with_decimal_point(decimals),
+        account_info.data.reserved.with_decimal_point(decimals),
+        account_info.data.misc_frozen.with_decimal_point(decimals),
+        account_info.data.fee_frozen.with_decimal_point(decimals)
     ))
 }
 
@@ -206,19 +232,18 @@ fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
 }
 
 trait DecimalPointPuttable {
-    fn with_decimal_point(self) -> String;
+    fn with_decimal_point(self, decimals: TokenDecimals) -> String;
 }
 
 impl DecimalPointPuttable for &str {
-    fn with_decimal_point(self) -> String {
-        const POLKADOT_DECIMAL_PLACES: usize = 10;
+    fn with_decimal_point(self, decimals: TokenDecimals) -> String {
         let len = self.chars().count();
-        if len > POLKADOT_DECIMAL_PLACES {
+        if len > decimals {
             let mut count = 0;
             self.chars()
                 .map(|c| {
                     count = count + 1;
-                    if count == (len - POLKADOT_DECIMAL_PLACES) {
+                    if count == (len - decimals) {
                         return c.to_string() + ".";
                     } else {
                         return c.to_string();
@@ -227,17 +252,17 @@ impl DecimalPointPuttable for &str {
                 .collect::<String>()
         } else {
             let mut pad: String = "".into();
-            for _ in 0..=(POLKADOT_DECIMAL_PLACES - len) {
+            for _ in 0..=(decimals - len) {
                 pad.push('0');
             }
-            (pad + self).with_decimal_point()
+            (pad + self).with_decimal_point(decimals)
         }
     }
 }
 
 impl DecimalPointPuttable for u128 {
-    fn with_decimal_point(self) -> String {
-        (&format!("{}", self)).with_decimal_point()
+    fn with_decimal_point(self, decimals: TokenDecimals) -> String {
+        (&format!("{}", self)).with_decimal_point(decimals)
     }
 }
 
@@ -248,6 +273,24 @@ async fn main() -> Result<(), ScError> {
 
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
     let polkadot_addr = valid_polkadot_addr_from_env()?;
+
+    match fs::try_exists("./polkadot_properties.json") {
+        Ok(true) => (),
+        _ => {
+            println!("Couldn't find polkadot_properties.json. Creating and populating it.");
+            fs::write(
+                "./polkadot_properties.json",
+                system_properties(&rpc_endpoint).await?,
+            )
+            .expect("Unable to write file");
+        }
+    };
+    let mut polkadot_properties: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string("./polkadot_properties.json")?)?;
+    let token_decimals = polkadot_properties["tokenDecimals"]
+        .take()
+        .as_u64()
+        .unwrap_or(0) as TokenDecimals;
 
     let matches = Command::new("Stake Checker")
         .version("1.0")
@@ -261,11 +304,18 @@ async fn main() -> Result<(), ScError> {
                 .help("Call endpoint func rpc_methods"),
         )
         .arg(
-            Arg::with_name("get_metadata")
-                .long("get_metadata")
+            Arg::with_name("metadata")
+                .long("metadata")
                 .short('m')
                 .takes_value(false)
                 .help("Call endpoint func state_getMetadata"),
+        )
+        .arg(
+            Arg::with_name("properties")
+                .long("properties")
+                .short('p')
+                .takes_value(false)
+                .help("Call endpoint func system_properties"),
         )
         .arg(
             Arg::with_name("total_issuance")
@@ -296,15 +346,17 @@ async fn main() -> Result<(), ScError> {
     if matches.is_present("rpc_methods") {
         return rpc_methods(&rpc_endpoint).await;
     }
-    if matches.is_present("get_metadata") {
-        let metadata = state_get_metadata(&rpc_endpoint).await?;
-        println!("{}", metadata);
+    if matches.is_present("metadata") {
+        println!("{}", state_get_metadata(&rpc_endpoint).await?);
+    }
+    if matches.is_present("properties") {
+        println!("{}", system_properties(&rpc_endpoint).await?);
     }
     if matches.is_present("total_issuance") {
         let total_issuance = get_total_issuance(&rpc_endpoint).await?;
         println!(
             "Total issued {} DOT",
-            (&total_issuance.to_string()).with_decimal_point()
+            (&total_issuance.to_string()).with_decimal_point(token_decimals)
         );
     }
     if matches.is_present("account_info") {
@@ -336,7 +388,7 @@ async fn main() -> Result<(), ScError> {
         match stringifier {
             Some(stringify) => {
                 println!("Using formatter");
-                println!("{}", stringify(bytes)?);
+                println!("{}", stringify(bytes, token_decimals)?);
             }
             None => println!("{:?}", bytes),
         }

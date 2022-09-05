@@ -27,17 +27,17 @@ OPTIONS:
     -h, --help
             Print help information
 
-    -m, --get_metadata
+    -m, --metadata
             Call endpoint func state_getMetadata
+
+    -p, --properties
+            Call endpoint func system_properties
 
     -r, --rpc_methods
             Call endpoint func rpc_methods
 
     -t, --total_issuance
             Get endpoint chain's total issuance
-
-        --test
-            Used for development purposes
 
     -V, --version
             Print version information
