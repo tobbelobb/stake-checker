@@ -16,8 +16,8 @@ USAGE:
     stake-checker [OPTIONS]
 
 OPTIONS:
-    -a, --account_info
-            Get account\'s free balance
+    -a, --account_balances
+            Get account\'s balances
 
     -g, --get_storage <get_storage>...
             Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and

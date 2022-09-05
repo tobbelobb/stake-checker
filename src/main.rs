@@ -325,11 +325,11 @@ async fn main() -> Result<(), ScError> {
                 .help("Get endpoint chain's total issuance"),
         )
         .arg(
-            Arg::with_name("account_info")
-                .long("account_info")
+            Arg::with_name("account_balances")
+                .long("account_balances")
                 .short('a')
                 .takes_value(false)
-                .help("Get account's free balance"),
+                .help("Get account's balances"),
         )
         .arg(
             Arg::with_name("get_storage")
@@ -359,10 +359,23 @@ async fn main() -> Result<(), ScError> {
             (&total_issuance.to_string()).with_decimal_point(token_decimals)
         );
     }
-    if matches.is_present("account_info") {
+    if matches.is_present("account_balances") {
+        let account_info = get_account_info(&rpc_endpoint, &polkadot_addr).await?;
         println!(
-            "{:?}",
-            get_account_info(&rpc_endpoint, &polkadot_addr).await?
+            "Free: {} DOT, Reserved: {} DOT, Misc Frozen: {} DOT, Fee Frozen: {} DOT",
+            account_info.data.free.with_decimal_point(token_decimals),
+            account_info
+                .data
+                .reserved
+                .with_decimal_point(token_decimals),
+            account_info
+                .data
+                .misc_frozen
+                .with_decimal_point(token_decimals),
+            account_info
+                .data
+                .fee_frozen
+                .with_decimal_point(token_decimals)
         );
     }
     if matches.is_present("get_storage") {
