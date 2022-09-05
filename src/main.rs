@@ -13,6 +13,8 @@ use sp_core::{
 };
 
 #[cfg(test)]
+mod cli_tests;
+#[cfg(test)]
 mod tests;
 
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
@@ -289,12 +291,6 @@ async fn main() -> Result<(), ScError> {
                 .max_values(3)
                 .help("Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and <name>. Third argument is optional. The program will try to decode the value before printing, but will print raw bytes if the method+name combination is unknown."),
         )
-        .arg(
-            Arg::with_name("test")
-                .long("test")
-                .takes_value(false)
-                .help("Used for development purposes"),
-        )
         .get_matches();
 
     if matches.is_present("rpc_methods") {
@@ -344,9 +340,6 @@ async fn main() -> Result<(), ScError> {
             }
             None => println!("{:?}", bytes),
         }
-    }
-    if matches.is_present("test") {
-        return Ok(());
     }
 
     Ok(())
