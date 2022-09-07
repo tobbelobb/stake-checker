@@ -17,7 +17,7 @@ USAGE:
 
 OPTIONS:
     -a, --account_balances
-            Get account\'s balances
+            Get account's balances
 
     -g, --get_storage <get_storage>...
             Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and
@@ -35,6 +35,9 @@ OPTIONS:
 
     -r, --rpc_methods
             Call endpoint func rpc_methods
+
+    -s, --staking_rewards
+            Get account's staking rewards
 
     -t, --total_issuance
             Get endpoint chain's total issuance

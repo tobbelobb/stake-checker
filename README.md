@@ -8,6 +8,7 @@ Configure the url of the rpc node, and the polkadot address in an .env file:
 ```bash
 echo "POLKADOT_ADDR=<your_address_here>" >> .env
 echo "RPC_ENDPOINT=<url_here>" >> .env
+echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
 ```
 
 Build the binary and ask what it can do for you:
@@ -15,7 +16,7 @@ Build the binary and ask what it can do for you:
 cargo run -- --help
 ```
 
-Do an example query for total issuance on polkadot
+Do an example rpc query for total issuance on polkadot
 ```bash
 cargo run -- --total_issuance
 ```
@@ -25,6 +26,11 @@ Make the same query but by providing a storage method and a storage name
 cargo run -- --get_storage Balances TotalIssuance
 ```
 
+Ask the subquery endpoint for a list of your latest staking rewards
+```bash
+cargo run -- --staking_rewards
+```
+
 
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)
@@ -32,3 +38,4 @@ cargo run -- --get_storage Balances TotalIssuance
  - [Polkadot Interaction Examples rs](https://github.com/paritytech/polkadot-interaction-examples-rs)
  - [subxt: A Library to Submit Extrinsics to a Substrate Node via RPC](https://github.com/paritytech/subxt)
  - [substrate-api-client: A Rust Lib for Connecting to Substrate RPC Interface via WebSockets](https://github.com/scs/substrate-api-client)
+ - [SubQuery Staking Sum Tutorial Example](https://explorer.subquery.network/subquery/subquery/tutorial---staking-sum)

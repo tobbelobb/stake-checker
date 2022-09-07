@@ -2402,6 +2402,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-aux"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c79c1a5a310c28bf9f7a4b9bd848553051120d80a5952f993c7eb62f6ed6e4c5"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serde-value"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2988,6 +2999,7 @@ name = "stake-checker"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "chrono",
  "clap",
  "dotenv",
  "frame-metadata",
@@ -3001,6 +3013,7 @@ dependencies = [
  "predicates",
  "reqwest",
  "serde",
+ "serde-aux",
  "serde_json",
  "sp-core",
  "tokio",

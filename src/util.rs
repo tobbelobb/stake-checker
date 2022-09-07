@@ -20,3 +20,19 @@ pub async fn rpc<Params: serde::Serialize>(
     let mut ans: Value = resp.json().await?;
     Ok(ans["result"].take())
 }
+
+pub async fn subquery<Params: serde::Serialize>(
+    endpoint: &str,
+    query: Params,
+) -> Result<serde_json::Value, reqwest::Error> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(endpoint)
+        .json(&json! {{
+            "query": query
+        }})
+        .send()
+        .await?;
+    let mut ans: Value = resp.json().await?;
+    Ok(ans["data"].take())
+}

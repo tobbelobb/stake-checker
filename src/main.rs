@@ -2,13 +2,16 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
-use util::rpc;
+use util::{rpc, subquery};
 
+use chrono::NaiveDateTime;
 use clap::{Arg, Command};
 use frame_metadata::RuntimeMetadataPrefixed;
 use log::error;
 use log4rs;
 use parity_scale_codec::Decode;
+use serde::{de, Deserialize, Deserializer};
+use serde_aux::prelude::*;
 use serde_json;
 use sp_core::{
     crypto::AccountId32, crypto::PublicError, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec,
@@ -26,7 +29,8 @@ type Stringifier = fn(Vec<u8>, TokenDecimals) -> Result<String, ScError>;
 
 #[derive(Debug)]
 enum ScError {
-    NoEndpoint,
+    NoRpcEndpoint,
+    NoSubqueryEndpoint,
     NoPolkadotAddr,
     InvalidPolkadotAddr,
     NoDataFound,
@@ -42,7 +46,10 @@ impl std::error::Error for ScError {}
 impl fmt::Display for ScError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ScError::NoEndpoint => {
+            ScError::NoRpcEndpoint => {
+                write!(f, "No RPC_ENDPOINT set in .env")
+            }
+            ScError::NoSubqueryEndpoint => {
                 write!(f, "No RPC_ENDPOINT set in .env")
             }
             ScError::NoPolkadotAddr => {
@@ -93,7 +100,51 @@ impl From<std::io::Error> for ScError {
     }
 }
 
-#[allow(dead_code)]
+// https://stackoverflow.com/questions/57614558/how-to-use-a-custom-serde-deserializer-for-chrono-timestamps
+fn naive_date_time_from_str<'de, D>(deserializer: D) -> Result<NaiveDateTime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut s: String = Deserialize::deserialize(deserializer)?;
+    const EXAMPLE_DATE: &str = "2022-02-03T20:34:00.003";
+    while s.len() < EXAMPLE_DATE.len() {
+        s.push('0');
+    }
+    NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S.%3f").map_err(de::Error::custom)
+}
+
+#[derive(Deserialize, Debug)]
+struct Reward {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    balance: u128,
+    #[serde(deserialize_with = "naive_date_time_from_str")]
+    date: NaiveDateTime,
+}
+
+async fn get_staking_rewards(subquery_endpoint: &str, polkadot_addr: &str) -> Result<(), ScError> {
+    let query = format!(
+        "{{ stakingRewards (last: 100, orderBy: DATE_ASC, filter: \
+            {{accountId : {{equalTo : \"{}\"}}}}) {{ \
+              nodes {{ \
+                balance \
+                date \
+              }}}}}}",
+        polkadot_addr
+    );
+    let ans = subquery(subquery_endpoint, query).await?;
+    let rewards = ans["stakingRewards"]["nodes"].as_array();
+    match rewards {
+        Some(vec) => {
+            for reward in vec {
+                let r: Reward = serde_json::from_value(reward.clone())?;
+                println!("{:?}, {}", r.date, r.balance)
+            }
+        }
+        None => println!("{}", serde_json::to_string_pretty(&rewards).unwrap()),
+    };
+    Ok(())
+}
+
 async fn rpc_methods(rpc_endpoint: &str) -> Result<(), ScError> {
     let ans = rpc(rpc_endpoint, "rpc_methods", ()).await?;
     println!("{}", serde_json::to_string_pretty(&ans).unwrap());
@@ -197,30 +248,30 @@ async fn get_account_info(
     Ok(account_info)
 }
 
-fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
-    let rpc_endpoint = match dotenv::var("RPC_ENDPOINT") {
+fn get_valid_env_var<'a>(var_name: &'a str, err: ScError) -> Result<String, ScError> {
+    let var = match dotenv::var(var_name) {
         Ok(s) => s,
         Err(_) => "".into(),
     };
 
-    if rpc_endpoint.is_empty() {
-        error!("Empty RPC_ENDPOINT provided in .env file.");
-        return Err(ScError::NoEndpoint);
+    if var.is_empty() {
+        error!("No {var_name} provided in .env file.");
+        return Err(err);
     }
 
-    Ok(rpc_endpoint)
+    Ok(var)
+}
+
+fn valid_subquery_endpoint_from_env() -> Result<String, ScError> {
+    get_valid_env_var("SUBQUERY_ENDPOINT", ScError::NoSubqueryEndpoint)
+}
+
+fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
+    get_valid_env_var("RPC_ENDPOINT", ScError::NoRpcEndpoint)
 }
 
 fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
-    let addr = match dotenv::var("POLKADOT_ADDR") {
-        Ok(s) => s,
-        Err(_) => "".into(),
-    };
-
-    if addr.is_empty() {
-        error!("Empty POLKADOT_ADDR provided in .env file.");
-        return Err(ScError::NoPolkadotAddr);
-    }
+    let addr = get_valid_env_var("POLKADOT_ADDR", ScError::NoPolkadotAddr)?;
     let account_id = AccountId32::from_string(&addr)?;
     let back_to_string =
         account_id.to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into());
@@ -272,6 +323,7 @@ async fn main() -> Result<(), ScError> {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
+    let subquery_endpoint = valid_subquery_endpoint_from_env()?;
     let polkadot_addr = valid_polkadot_addr_from_env()?;
 
     match fs::try_exists("./polkadot_properties.json") {
@@ -341,8 +393,18 @@ async fn main() -> Result<(), ScError> {
                 .max_values(3)
                 .help("Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and <name>. Third argument is optional. The program will try to decode the value before printing, but will print raw bytes if the method+name combination is unknown."),
         )
+        .arg(
+            Arg::with_name("staking_rewards")
+                .long("staking_rewards")
+                .short('s')
+                .takes_value(false)
+                .help("Get account's staking rewards"),
+        )
         .get_matches();
 
+    if matches.is_present("staking_rewards") {
+        return get_staking_rewards(&subquery_endpoint, &polkadot_addr).await;
+    }
     if matches.is_present("rpc_methods") {
         return rpc_methods(&rpc_endpoint).await;
     }
