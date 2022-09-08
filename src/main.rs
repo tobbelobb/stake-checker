@@ -391,7 +391,12 @@ async fn main() -> Result<(), ScError> {
                 .multiple_values(true)
                 .min_values(2)
                 .max_values(3)
-                .help("Raw state_getStorage call to the endpoint. Provide at least two arguments: <method>, and <name>. Third argument is optional. The program will try to decode the value before printing, but will print raw bytes if the method+name combination is unknown."),
+                .help(
+                    "Raw state_getStorage rpc call. Provide at least two args: <method>, \
+                    and <name>. Third is optional. The program will try to decode the value \
+                    before printing, but will print raw bytes if the method+name combination \
+                    is unknown.",
+                ),
         )
         .arg(
             Arg::with_name("staking_rewards")
