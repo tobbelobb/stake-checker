@@ -33,7 +33,8 @@ OPTIONS:
             Call endpoint func rpc_methods
 
     -s, --staking_rewards
-            Get account's staking rewards
+            Get account's staking rewards. Will skip those already listed in known_rewards.csv. Will
+            retrieve at most 100 new rewards.
 
     -t, --total_issuance
             Get endpoint chain's total issuance

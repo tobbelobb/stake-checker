@@ -6,12 +6,12 @@ use util::{rpc, subquery};
 
 use chrono::NaiveDateTime;
 use clap::{Arg, Command};
+use csv::ReaderBuilder;
 use frame_metadata::RuntimeMetadataPrefixed;
 use log::error;
 use log4rs;
 use parity_scale_codec::Decode;
 use serde::{de, Deserialize, Deserializer};
-use serde_aux::prelude::*;
 use serde_json;
 use sp_core::{
     crypto::AccountId32, crypto::PublicError, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec,
@@ -39,6 +39,7 @@ enum ScError {
     Crypto(PublicError),
     Codec(parity_scale_codec::Error),
     Json(serde_json::Error),
+    Csv(csv::Error),
 }
 
 impl std::error::Error for ScError {}
@@ -66,7 +67,14 @@ impl fmt::Display for ScError {
             ScError::Crypto(err) => write!(f, "Cryptographic error {}", err),
             ScError::Codec(err) => write!(f, "Codec error {}", err),
             ScError::Json(err) => write!(f, "Json error {}", err),
+            ScError::Csv(err) => write!(f, "Comma separated value error {}", err),
         }
+    }
+}
+
+impl From<csv::Error> for ScError {
+    fn from(err: csv::Error) -> ScError {
+        ScError::Csv(err)
     }
 }
 
@@ -113,15 +121,83 @@ where
     NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S.%3f").map_err(de::Error::custom)
 }
 
-#[derive(Deserialize, Debug)]
-struct Reward {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    balance: u128,
-    #[serde(deserialize_with = "naive_date_time_from_str")]
-    date: NaiveDateTime,
+// https://users.rust-lang.org/t/deserialize-a-number-that-may-be-inside-a-string-serde-json/27318
+// A custom deserializer, since the value sometimes appear as a quoted string
+fn balance_from_maybe_str<'de, D>(deserializer: D) -> Result<u128, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    use serde_json::Value;
+    let v = Value::deserialize(deserializer)?;
+    let n = v
+        .as_u64()
+        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        .ok_or_else(|| D::Error::custom("non-integer"))?
+        .try_into()
+        .map_err(|_| D::Error::custom("overflow"))?;
+    Ok(n)
 }
 
-async fn get_staking_rewards(subquery_endpoint: &str, polkadot_addr: &str) -> Result<(), ScError> {
+#[derive(Deserialize, Debug, Clone, Copy)]
+struct Reward {
+    #[serde(deserialize_with = "naive_date_time_from_str")]
+    date: NaiveDateTime,
+    #[serde(deserialize_with = "balance_from_maybe_str")]
+    balance: u128,
+}
+
+async fn get_staking_rewards(
+    subquery_endpoint: &str,
+    polkadot_addr: &str,
+    known_rewards_file: &str,
+) -> Result<Vec<Reward>, ScError> {
+    let mut olds: Vec<Reward> = vec![];
+
+    match fs::try_exists(known_rewards_file) {
+        Ok(true) => {
+            let mut rdr = ReaderBuilder::new()
+                .has_headers(false)
+                .flexible(true)
+                .from_path(known_rewards_file)?;
+            for record in rdr.deserialize() {
+                let reward: Reward = record?;
+                olds.push(reward);
+            }
+        }
+        _ => {}
+    }
+
+    let latest = query_staking_rewards(subquery_endpoint, polkadot_addr).await?;
+
+    match olds.last() {
+        Some(newest_old) => {
+            let mut latest_iter = latest.into_iter();
+            let mut news: Vec<Reward> = vec![];
+            match latest_iter.position(|x| x.date >= newest_old.date) {
+                Some(_) => {
+                    for elem in latest_iter {
+                        news.push(elem);
+                    }
+                }
+                None => {}
+            }
+            Ok(news)
+        }
+        None => Ok(latest),
+    }
+}
+
+impl fmt::Display for Reward {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?},{}", self.date, self.balance)
+    }
+}
+
+async fn query_staking_rewards(
+    subquery_endpoint: &str,
+    polkadot_addr: &str,
+) -> Result<Vec<Reward>, ScError> {
     let query = format!(
         "{{ stakingRewards (last: 100, orderBy: DATE_ASC, filter: \
             {{accountId : {{equalTo : \"{}\"}}}}) {{ \
@@ -132,17 +208,19 @@ async fn get_staking_rewards(subquery_endpoint: &str, polkadot_addr: &str) -> Re
         polkadot_addr
     );
     let ans = subquery(subquery_endpoint, query).await?;
-    let rewards = ans["stakingRewards"]["nodes"].as_array();
-    match rewards {
+    let maybe_rewards = ans["stakingRewards"]["nodes"].as_array();
+    match maybe_rewards {
         Some(vec) => {
+            let mut ret_rewards: Vec<Reward> = Vec::new();
             for reward in vec {
                 let r: Reward = serde_json::from_value(reward.clone())?;
-                println!("{:?}, {}", r.date, r.balance)
+                ret_rewards.push(r);
             }
+            return Ok(ret_rewards);
         }
-        None => println!("{}", serde_json::to_string_pretty(&rewards).unwrap()),
+        None => {}
     };
-    Ok(())
+    Ok(vec![])
 }
 
 async fn rpc_methods(rpc_endpoint: &str) -> Result<(), ScError> {
@@ -282,6 +360,13 @@ fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
     Ok(addr)
 }
 
+fn known_rewards_from_env() -> String {
+    match dotenv::var("KNOWN_REWARDS_FILE") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    }
+}
+
 trait DecimalPointPuttable {
     fn with_decimal_point(self, decimals: TokenDecimals) -> String;
 }
@@ -379,7 +464,12 @@ async fn main() -> Result<(), ScError> {
                 .long("staking_rewards")
                 .short('s')
                 .takes_value(false)
-                .help("Get account's staking rewards"),
+                .help(
+                    "Get account's staking rewards. \
+                       Will skip those already listed in \
+                       known_rewards.csv. \
+                       Will retrieve at most 100 new rewards.",
+                ),
         )
         .get_matches();
 
@@ -389,6 +479,7 @@ async fn main() -> Result<(), ScError> {
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
     let subquery_endpoint = valid_subquery_endpoint_from_env()?;
     let polkadot_addr = valid_polkadot_addr_from_env()?;
+    let known_rewards_file = known_rewards_from_env();
 
     match fs::try_exists("./polkadot_properties.json") {
         Ok(true) => (),
@@ -409,7 +500,14 @@ async fn main() -> Result<(), ScError> {
         .unwrap_or(0) as TokenDecimals;
 
     if matches.is_present("staking_rewards") {
-        return get_staking_rewards(&subquery_endpoint, &polkadot_addr).await;
+        let staking_rewards =
+            get_staking_rewards(&subquery_endpoint, &polkadot_addr, &known_rewards_file).await?;
+        print!(
+            "{}",
+            staking_rewards
+                .iter()
+                .fold(String::new(), |acc, r| acc + &r.to_string() + "\n")
+        );
     }
     if matches.is_present("rpc_methods") {
         return rpc_methods(&rpc_endpoint).await;

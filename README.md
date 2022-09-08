@@ -9,6 +9,7 @@ Configure the url of the rpc node, and the polkadot address in an .env file:
 echo "POLKADOT_ADDR=<your_address_here>" >> .env
 echo "RPC_ENDPOINT=<url_here>" >> .env
 echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
+echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
 ```
 
 Build the binary and ask what it can do for you:
@@ -26,9 +27,9 @@ Make the same query but by providing a storage method and a storage name
 cargo run -- --get_storage Balances TotalIssuance
 ```
 
-Ask the subquery endpoint for a list of your latest staking rewards
-```bash
-cargo run -- --staking_rewards
+Ask the subquery endpoint for a list of your latest staking rewards that were not already listed among your known rewards, and append them onto your file of known rewards
+``bash
+cargo run -- --staking_rewards >> known_rewards.csv
 ```
 
 
