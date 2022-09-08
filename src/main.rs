@@ -319,35 +319,11 @@ impl DecimalPointPuttable for u128 {
 
 #[tokio::main]
 async fn main() -> Result<(), ScError> {
-    dotenv::dotenv().ok();
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-
-    let rpc_endpoint = valid_rpc_endpoint_from_env()?;
-    let subquery_endpoint = valid_subquery_endpoint_from_env()?;
-    let polkadot_addr = valid_polkadot_addr_from_env()?;
-
-    match fs::try_exists("./polkadot_properties.json") {
-        Ok(true) => (),
-        _ => {
-            println!("Couldn't find polkadot_properties.json. Creating and populating it.");
-            fs::write(
-                "./polkadot_properties.json",
-                system_properties(&rpc_endpoint).await?,
-            )
-            .expect("Unable to write file");
-        }
-    };
-    let mut polkadot_properties: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string("./polkadot_properties.json")?)?;
-    let token_decimals = polkadot_properties["tokenDecimals"]
-        .take()
-        .as_u64()
-        .unwrap_or(0) as TokenDecimals;
-
     let matches = Command::new("Stake Checker")
         .version("1.0")
         .author("Torbjørn L. <tobben@fastmail.fm>")
         .about("Check Polkadot Staking Rewards")
+        .setting(clap::AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("rpc_methods")
                 .long("rpc_methods")
@@ -406,6 +382,31 @@ async fn main() -> Result<(), ScError> {
                 .help("Get account's staking rewards"),
         )
         .get_matches();
+
+    dotenv::dotenv().ok();
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+
+    let rpc_endpoint = valid_rpc_endpoint_from_env()?;
+    let subquery_endpoint = valid_subquery_endpoint_from_env()?;
+    let polkadot_addr = valid_polkadot_addr_from_env()?;
+
+    match fs::try_exists("./polkadot_properties.json") {
+        Ok(true) => (),
+        _ => {
+            println!("Couldn't find polkadot_properties.json. Creating and populating it.");
+            fs::write(
+                "./polkadot_properties.json",
+                system_properties(&rpc_endpoint).await?,
+            )
+            .expect("Unable to write file");
+        }
+    };
+    let mut polkadot_properties: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string("./polkadot_properties.json")?)?;
+    let token_decimals = polkadot_properties["tokenDecimals"]
+        .take()
+        .as_u64()
+        .unwrap_or(0) as TokenDecimals;
 
     if matches.is_present("staking_rewards") {
         return get_staking_rewards(&subquery_endpoint, &polkadot_addr).await;
