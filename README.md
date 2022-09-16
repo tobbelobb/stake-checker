@@ -7,7 +7,7 @@ A program that interacts with a Polkadot rpc node.
 Configure the url of the rpc node, and the polkadot address in an .env file:
 ```bash
 echo "POLKADOT_ADDR=<your_address_here>" >> .env
-echo "RPC_ENDPOINT=<url_here>" >> .env
+echo "RPC_ENDPOINT=https://polkadot-rpc.dwellir.com" >> .env
 echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
 echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
 ```
