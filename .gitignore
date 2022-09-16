@@ -3,3 +3,7 @@ secret.json
 .env
 polkadot_metadata.json
 polkadot_properties.json
+known_rewards.csv
+known_rewards_backup.csv
+stdout.log
+pallets_from_metadata
