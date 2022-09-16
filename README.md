@@ -28,7 +28,7 @@ cargo run -- --get_storage Balances TotalIssuance
 ```
 
 Ask the subquery endpoint for a list of your latest staking rewards that were not already listed among your known rewards, and append them onto your file of known rewards
-``bash
+```bash
 cargo run -- --staking_rewards >> known_rewards.csv
 ```
 
