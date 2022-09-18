@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
+use std::path::Path;
 use util::{rpc, subquery};
 
 use chrono::NaiveDateTime;
@@ -23,7 +24,7 @@ mod cli_tests;
 mod tests;
 
 type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
-type Stringifier = fn(Vec<u8>, TokenDecimals) -> Result<String, ScError>;
+type Stringifier = fn(&[u8], TokenDecimals) -> Result<String, ScError>;
 
 #[derive(Debug)]
 enum ScError {
@@ -148,15 +149,15 @@ struct Reward {
 async fn get_staking_rewards(
     subquery_endpoint: &str,
     polkadot_addr: &str,
-    known_rewards_file: &str,
+    known_rewards_file: impl AsRef<Path>,
 ) -> Result<Vec<Reward>, ScError> {
     let mut olds: Vec<Reward> = vec![];
 
-    if let Ok(true) = fs::try_exists(known_rewards_file) {
+    if let Ok(true) = fs::try_exists(&known_rewards_file) {
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
-            .from_path(known_rewards_file)?;
+            .from_path(&known_rewards_file)?;
         for record in rdr.deserialize() {
             let reward: Reward = record?;
             olds.push(reward);
@@ -261,18 +262,18 @@ async fn state_get_storage(
     Ok(result_bytes)
 }
 
-fn decode_u128(bytes: Vec<u8>) -> Result<u128, ScError> {
-    let res = u128::decode(&mut bytes.as_slice())?;
+fn decode_u128(mut bytes: &[u8]) -> Result<u128, ScError> {
+    let res = u128::decode(&mut bytes)?;
     Ok(res)
 }
 
-fn stringify_encoded_u128(bytes: Vec<u8>) -> Result<String, ScError> {
+fn stringify_encoded_u128(bytes: &[u8]) -> Result<String, ScError> {
     let res: u128 = decode_u128(bytes)?;
     Ok(format!("{}", res))
 }
 
 fn stringify_encoded_total_issuance(
-    bytes: Vec<u8>,
+    bytes: &[u8],
     token_decimals: TokenDecimals,
 ) -> Result<String, ScError> {
     let unpointed_string = stringify_encoded_u128(bytes)?;
@@ -283,10 +284,10 @@ fn stringify_encoded_total_issuance(
 }
 
 fn stringify_encoded_system_account(
-    bytes: Vec<u8>,
+    mut bytes: &[u8],
     decimals: TokenDecimals,
 ) -> Result<String, ScError> {
-    let account_info = PolkadotAccountInfo::decode(&mut bytes.as_ref())?;
+    let account_info = PolkadotAccountInfo::decode(&mut bytes)?;
     Ok(format!(
         "Nonce: {}, Consumers: {}, Providers: {}, Sufficients: {}, Free: {} DOT, Reserved: {} DOT, Misc Frozen: {} DOT, Fee Frozen: {} DOT",
         account_info.nonce,
@@ -302,7 +303,7 @@ fn stringify_encoded_system_account(
 
 async fn get_total_issuance(rpc_endpoint: &str) -> Result<u128, ScError> {
     let result_bytes = state_get_storage(rpc_endpoint, "Balances", "TotalIssuance", None).await?;
-    let total_issued = decode_u128(result_bytes)?;
+    let total_issued = decode_u128(result_bytes.as_slice())?;
     Ok(total_issued)
 }
 
@@ -557,7 +558,7 @@ async fn main() -> Result<(), ScError> {
         match stringifier {
             Some(stringify) => {
                 println!("Using formatter");
-                println!("{}", stringify(bytes, token_decimals)?);
+                println!("{}", stringify(bytes.as_slice(), token_decimals)?);
             }
             None => println!("{:?}", bytes),
         }
