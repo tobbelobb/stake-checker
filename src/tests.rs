@@ -1,12 +1,9 @@
-use crate::{
-    get_staking_rewards, get_total_issuance, naive_date_time_from_str, DecimalPointPuttable, Reward,
-};
+use crate::{get_staking_rewards, get_total_issuance, DecimalPointPuttable, Reward};
 use chrono::NaiveDate;
 
-use mockito::mock;
-use serde::de::value::StrDeserializer;
 use std::io::Write;
-//use testfile;
+
+use mockito::mock;
 
 #[test]
 fn check_with_decimal_point_strings() {
@@ -88,23 +85,5 @@ async fn get_staking_rewards_happy_case() -> Result<(), Box<dyn std::error::Erro
             balance: 11
         }
     );
-    Ok(())
-}
-
-#[test]
-fn read_date_simplest_case() -> Result<(), Box<dyn std::error::Error>> {
-    let date_str = "2022-02-03T20:34:00.003";
-    let date_time = naive_date_time_from_str(StrDeserializer::<serde_json::Error>::new(date_str))?;
-    let back_to_str = format!("{:?}", date_time);
-    assert_eq!(back_to_str, "2022-02-03T20:34:00.003");
-    Ok(())
-}
-
-#[test]
-fn read_date_missing_millisecond() -> Result<(), Box<dyn std::error::Error>> {
-    let date_str = "2022-04-01T18:27:12.01";
-    let date_time = naive_date_time_from_str(StrDeserializer::<serde_json::Error>::new(date_str))?;
-    let back_to_str = format!("{:?}", date_time);
-    assert_eq!(back_to_str, "2022-04-01T18:27:12.010");
     Ok(())
 }
