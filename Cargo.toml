@@ -30,3 +30,4 @@ csv = "1.1.6"
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "2.1"
+testfile = "0.0.4"

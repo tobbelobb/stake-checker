@@ -9,10 +9,8 @@ use clap::{Arg, Command};
 use csv::ReaderBuilder;
 use frame_metadata::RuntimeMetadataPrefixed;
 use log::error;
-use log4rs;
 use parity_scale_codec::Decode;
 use serde::{de, Deserialize, Deserializer};
-use serde_json;
 use sp_core::{
     crypto::AccountId32, crypto::PublicError, crypto::Ss58AddressFormatRegistry, crypto::Ss58Codec,
     hashing,
@@ -139,7 +137,7 @@ where
     Ok(n)
 }
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, PartialEq, Eq, Debug, Clone, Copy)]
 struct Reward {
     #[serde(deserialize_with = "naive_date_time_from_str")]
     date: NaiveDateTime,
@@ -154,38 +152,32 @@ async fn get_staking_rewards(
 ) -> Result<Vec<Reward>, ScError> {
     let mut olds: Vec<Reward> = vec![];
 
-    match fs::try_exists(known_rewards_file) {
-        Ok(true) => {
-            let mut rdr = ReaderBuilder::new()
-                .has_headers(false)
-                .flexible(true)
-                .from_path(known_rewards_file)?;
-            for record in rdr.deserialize() {
-                let reward: Reward = record?;
-                olds.push(reward);
-            }
+    if let Ok(true) = fs::try_exists(known_rewards_file) {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(known_rewards_file)?;
+        for record in rdr.deserialize() {
+            let reward: Reward = record?;
+            olds.push(reward);
         }
-        _ => {}
     }
 
     let latest = query_staking_rewards(subquery_endpoint, polkadot_addr).await?;
 
-    match olds.last() {
-        Some(newest_old) => {
-            let mut latest_iter = latest.into_iter();
-            let mut news: Vec<Reward> = vec![];
-            match latest_iter.position(|x| x.date >= newest_old.date) {
-                Some(_) => {
-                    for elem in latest_iter {
-                        news.push(elem);
-                    }
-                }
-                None => {}
+    if let Some(newest_old) = olds.last() {
+        let mut latest_iter = latest.into_iter();
+        let mut news: Vec<Reward> = vec![];
+
+        if latest_iter.any(|x| x.date >= newest_old.date) {
+            for elem in latest_iter {
+                news.push(elem);
             }
-            Ok(news)
         }
-        None => Ok(latest),
+
+        return Ok(news);
     }
+    Ok(latest)
 }
 
 impl fmt::Display for Reward {
@@ -209,17 +201,15 @@ async fn query_staking_rewards(
     );
     let ans = subquery(subquery_endpoint, query).await?;
     let maybe_rewards = ans["stakingRewards"]["nodes"].as_array();
-    match maybe_rewards {
-        Some(vec) => {
-            let mut ret_rewards: Vec<Reward> = Vec::new();
-            for reward in vec {
-                let r: Reward = serde_json::from_value(reward.clone())?;
-                ret_rewards.push(r);
-            }
-            return Ok(ret_rewards);
+    if let Some(vec) = maybe_rewards {
+        let mut ret_rewards: Vec<Reward> = Vec::new();
+        for reward in vec {
+            let r: Reward = serde_json::from_value(reward.clone())?;
+            ret_rewards.push(r);
         }
-        None => {}
+        return Ok(ret_rewards);
     };
+
     Ok(vec![])
 }
 
@@ -233,7 +223,7 @@ async fn state_get_metadata(rpc_endpoint: &str) -> Result<String, ScError> {
     let res = rpc(rpc_endpoint, "state_getMetadata", ()).await?;
     // Decode the hex value into bytes (which are the SCALE encoded metadata details):
     let metadata_hex = res.as_str().unwrap();
-    let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
+    let metadata_bytes = hex::decode(metadata_hex.trim_start_matches("0x")).unwrap();
     // Fortunately, we know what type the metadata is, so we are able to decode our SCALEd bytes to it:
     let decoded = RuntimeMetadataPrefixed::decode(&mut metadata_bytes.as_slice()).unwrap();
     Ok(serde_json::to_string_pretty(&decoded).unwrap())
@@ -326,7 +316,7 @@ async fn get_account_info(
     Ok(account_info)
 }
 
-fn get_valid_env_var<'a>(var_name: &'a str, err: ScError) -> Result<String, ScError> {
+fn get_valid_env_var(var_name: &str, err: ScError) -> Result<String, ScError> {
     let var = match dotenv::var(var_name) {
         Ok(s) => s,
         Err(_) => "".into(),
@@ -378,11 +368,11 @@ impl DecimalPointPuttable for &str {
             let mut count = 0;
             self.chars()
                 .map(|c| {
-                    count = count + 1;
+                    count += 1;
                     if count == (len - decimals) {
-                        return c.to_string() + ".";
+                        c.to_string() + "."
                     } else {
-                        return c.to_string();
+                        c.to_string()
                     }
                 })
                 .collect::<String>()

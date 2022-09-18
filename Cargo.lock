@@ -3028,6 +3028,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sp-core",
+ "testfile",
  "tokio",
 ]
 
@@ -3132,6 +3133,15 @@ name = "termtree"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "507e9898683b6c43a9aa55b64259b721b52ba226e0f3779137e50ad114a4c90b"
+
+[[package]]
+name = "testfile"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e1a9976d0f3f6c3fb2671ef5564d4be421cd5999aa7f2aad65e6fd5d17e5870"
+dependencies = [
+ "rand 0.7.3",
+]
 
 [[package]]
 name = "textwrap"
