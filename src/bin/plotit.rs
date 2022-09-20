@@ -1,7 +1,5 @@
 use poloto::num::timestamp::UnixTime;
 use poloto::prelude::*;
-use simple_moving_average::SumTreeSMA;
-use simple_moving_average::SMA;
 use stake_checker::*;
 
 fn main() -> Result<(), ScError> {
@@ -26,21 +24,11 @@ fn main() -> Result<(), ScError> {
         });
     }
 
-    let mut rewards_averaged: Vec<Reward> = vec![];
-    {
-        let mut ma = SumTreeSMA::<_, u128, 8>::new();
-        for reward in &rewards {
-            ma.add_sample(reward.balance);
-            rewards_averaged.push(Reward {
-                date: reward.date,
-                balance: ma.get_average(),
-            });
-        }
-    }
-
     let mut rewards_time_averaged: Vec<Reward> = vec![];
     let mut date_time = rewards.first().unwrap().date;
     let window_days = 8;
+    let mut rew_iter = rewards.iter();
+    let mut skip_samples = 0;
     while date_time <= rewards.last().unwrap().date {
         date_time += chrono::Duration::days(1);
         let time_window = [
@@ -49,10 +37,27 @@ fn main() -> Result<(), ScError> {
                 .unwrap(),
             date_time,
         ];
-        let sum = rewards
+
+        for x in rew_iter.by_ref() {
+            if x.date >= time_window[0] {
+                break;
+            }
+            skip_samples += 1;
+        }
+        let left_pos = rewards
             .iter()
-            .filter(|r| r.date > time_window[0] && r.date < time_window[1])
-            .fold(0, |acc, x| acc + x.balance / (window_days as u128));
+            .skip(skip_samples)
+            .position(|x| x.date >= time_window[0])
+            .unwrap_or(0);
+        let right_pos = rewards
+            .iter()
+            .skip(skip_samples)
+            .position(|x| x.date >= time_window[1])
+            .unwrap_or(rewards.len());
+        let sum = rewards[left_pos..right_pos]
+            .iter()
+            .fold(0, |acc, x| acc + x.balance)
+            / (window_days as u128);
         rewards_time_averaged.push(Reward {
             date: date_time,
             balance: sum,
@@ -69,16 +74,6 @@ fn main() -> Result<(), ScError> {
         .collect::<Vec<_>>();
     let data_time_averaged = dates_time_averaged.zip(balances_time_averaged);
 
-    let dates_averaged = rewards_averaged.iter().map(|r| {
-        let d = timezone.from_utc_datetime(&r.date);
-        UnixTime::from(d)
-    });
-    let balances_averaged = rewards_averaged
-        .iter()
-        .map(|r| (r.balance as f64) / f64::powf(10f64, token_decimals as f64))
-        .collect::<Vec<_>>();
-    let data_averaged = dates_averaged.zip(balances_averaged);
-
     let dates_w_dummys = rewards_w_dummys.iter().map(|r| {
         let d = timezone.from_utc_datetime(&r.date);
         UnixTime::from(d)
@@ -91,8 +86,9 @@ fn main() -> Result<(), ScError> {
 
     let data_for_plot = poloto::data(plots!(
         data_w_dummys.buffered_plot().histogram("Payouts"),
-        data_averaged.buffered_plot().line("SMA 8 payouts"),
-        data_time_averaged.buffered_plot().line("SMA 8 days")
+        data_time_averaged
+            .buffered_plot()
+            .line(format!("SMA {window_days} days"))
     ));
 
     let plotting_area_size = [1500.0, 800.0];
@@ -101,7 +97,6 @@ fn main() -> Result<(), ScError> {
         .with_dim(plotting_area_size)
         .build();
     let (bx, by) = poloto::ticks::bounds(&data_for_plot, &opt);
-    //let xtick_fmt = poloto::ticks::from_iter(dates.into_iter().step_by(100));
     let xtick_fmt = poloto::ticks::from_default(bx);
     let ytick_fmt = poloto::ticks::from_default(by);
 
