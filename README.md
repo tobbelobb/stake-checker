@@ -1,8 +1,8 @@
 ## stake-checker
 
-A program that interacts with a Polkadot rpc node.
+A command line tool for Polkadot staking reward lookups.
 
-### Usage
+### Configuration
 
 Configure the url of the rpc node, and the polkadot address in an .env file:
 ```bash
@@ -12,6 +12,8 @@ echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---stak
 echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
 echo "POLKADOT_PROPERTIES_FILE=polkadot_properties.json" >> .env
 ```
+
+### Usage
 
 Build the main binary and ask what it can do for you:
 ```bash
@@ -38,6 +40,9 @@ Plot known staking rewards in an svg file.
 cargo run --bin plotit > plot.svg
 ```
 
+I suggest tailoring usage to your needs with a script.
+A basic script called `check.sh` is included.
+Is uses the program eog to view the generated plot.
 
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)
