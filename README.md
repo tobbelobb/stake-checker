@@ -10,26 +10,32 @@ echo "POLKADOT_ADDR=<your_address_here>" >> .env
 echo "RPC_ENDPOINT=https://polkadot-rpc.dwellir.com" >> .env
 echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
 echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
+echo "POLKADOT_PROPERTIES_FILE=polkadot_properties.json" >> .env
 ```
 
-Build the binary and ask what it can do for you:
+Build the main binary and ask what it can do for you:
 ```bash
-cargo run -- --help
+cargo run --bin stake-checker -- --help
 ```
 
 Do an example rpc query for total issuance on polkadot
 ```bash
-cargo run -- --total_issuance
+cargo run --bin stake-checker -- --total_issuance
 ```
 
 Make the same query but by providing a storage method and a storage name
 ```bash
-cargo run -- --get_storage Balances TotalIssuance
+cargo run --bin stake-checker -- --get_storage Balances TotalIssuance
 ```
 
 Ask the subquery endpoint for a list of your latest staking rewards that were not already listed among your known rewards, and append them onto your file of known rewards
 ```bash
-cargo run -- --staking_rewards >> known_rewards.csv
+cargo run --bin stake-checker -- --staking_rewards >> known_rewards.csv
+```
+
+Plot known staking rewards in an svg file.
+```bash
+cargo run --bin plotit > plot.svg
 ```
 
 

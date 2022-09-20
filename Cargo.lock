@@ -1977,6 +1977,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 
 [[package]]
+name = "poloto"
+version = "15.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "185192f5138e3b032aae56d6b0b8e1d288881db4ddaaf139aea878dc7c2013ce"
+dependencies = [
+ "chrono",
+ "tagger",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3023,6 +3033,7 @@ dependencies = [
  "mockito",
  "pallet-balances",
  "parity-scale-codec",
+ "poloto",
  "predicates",
  "reqwest",
  "serde",
@@ -3098,6 +3109,12 @@ dependencies = [
  "syn",
  "unicode-xid",
 ]
+
+[[package]]
+name = "tagger"
+version = "4.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77dd78fc7dd20ba3a13620ec231cef9e73ea5c7ba162f6c4e05b1d521e04b221"
 
 [[package]]
 name = "tap"

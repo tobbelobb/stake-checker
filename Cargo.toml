@@ -21,6 +21,7 @@ pallet_system = { version = "4.0.0-dev", git = "https://github.com/paritytech/su
 mockito = "0.31.0"
 chrono = "0.4.22"
 csv = "1.1.6"
+poloto = "15.2.0"
 
 [dev-dependencies]
 assert_cmd = "2.0"

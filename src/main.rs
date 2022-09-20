@@ -42,13 +42,6 @@ fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
     Ok(addr)
 }
 
-fn known_rewards_from_env() -> String {
-    match dotenv::var("KNOWN_REWARDS_FILE") {
-        Ok(s) => s,
-        Err(_) => "".into(),
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), ScError> {
     let matches = Command::new("Stake Checker")
@@ -126,25 +119,21 @@ async fn main() -> Result<(), ScError> {
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
     let subquery_endpoint = valid_subquery_endpoint_from_env()?;
     let polkadot_addr = valid_polkadot_addr_from_env()?;
-    let known_rewards_file = known_rewards_from_env();
+    let known_rewards_file = known_rewards_file_from_env();
+    let polkadot_properties_file = polkadot_properties_file_from_env();
 
-    match fs::try_exists("./polkadot_properties.json") {
+    match fs::try_exists(&polkadot_properties_file) {
         Ok(true) => (),
         _ => {
-            println!("Couldn't find polkadot_properties.json. Creating and populating it.");
+            println!("Couldn't find {polkadot_properties_file}. Creating and populating it.");
             fs::write(
-                "./polkadot_properties.json",
+                &polkadot_properties_file,
                 system_properties(&rpc_endpoint).await?,
             )
             .expect("Unable to write file");
         }
     };
-    let mut polkadot_properties: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string("./polkadot_properties.json")?)?;
-    let token_decimals = polkadot_properties["tokenDecimals"]
-        .take()
-        .as_u64()
-        .unwrap_or(0) as TokenDecimals;
+    let token_decimals = token_decimals(polkadot_properties_file)?;
 
     if matches.is_present("staking_rewards") {
         let staking_rewards =

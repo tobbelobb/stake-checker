@@ -102,12 +102,58 @@ impl From<std::io::Error> for ScError {
     }
 }
 
+pub fn known_rewards_file_from_env() -> String {
+    match dotenv::var("KNOWN_REWARDS_FILE") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    }
+}
+
+pub fn polkadot_properties_file_from_env() -> String {
+    match dotenv::var("POLKADOT_PROPERTIES_FILE") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    }
+}
+
+pub fn token_decimals(file: impl AsRef<Path>) -> Result<TokenDecimals, ScError> {
+    let mut polkadot_properties: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(file)?)?;
+    Ok(polkadot_properties["tokenDecimals"]
+        .take()
+        .as_u64()
+        .unwrap_or(0) as TokenDecimals)
+}
+
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Reward {
     #[serde(deserialize_with = "util::naive_date_time_from_str")]
-    date: NaiveDateTime,
+    pub date: NaiveDateTime,
     #[serde(deserialize_with = "util::balance_from_maybe_str")]
-    balance: u128,
+    pub balance: u128,
+}
+
+impl poloto::build::unwrapper::Unwrapper for Reward {
+    type Item = (NaiveDateTime, u128);
+    fn unwrap(self) -> (NaiveDateTime, u128) {
+        (self.date, self.balance)
+    }
+}
+
+pub fn known_rewards(file: impl AsRef<Path>) -> Result<Vec<Reward>, ScError> {
+    let mut rewards: Vec<Reward> = vec![];
+
+    if let Ok(true) = fs::try_exists(&file) {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(&file)?;
+        for record in rdr.deserialize() {
+            let reward: Reward = record?;
+            rewards.push(reward);
+        }
+    }
+    Ok(rewards)
 }
 
 pub async fn get_staking_rewards(
@@ -115,19 +161,7 @@ pub async fn get_staking_rewards(
     polkadot_addr: &str,
     known_rewards_file: impl AsRef<Path>,
 ) -> Result<Vec<Reward>, ScError> {
-    let mut olds: Vec<Reward> = vec![];
-
-    if let Ok(true) = fs::try_exists(&known_rewards_file) {
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_path(&known_rewards_file)?;
-        for record in rdr.deserialize() {
-            let reward: Reward = record?;
-            olds.push(reward);
-        }
-    }
-
+    let olds = known_rewards(known_rewards_file)?;
     let latest = query_staking_rewards(subquery_endpoint, polkadot_addr).await?;
 
     if let Some(newest_old) = olds.last() {
@@ -139,7 +173,6 @@ pub async fn get_staking_rewards(
                 news.push(elem);
             }
         }
-
         return Ok(news);
     }
     Ok(latest)
