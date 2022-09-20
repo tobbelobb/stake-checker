@@ -47,7 +47,7 @@ fn main() -> Result<(), ScError> {
         let left_pos = rewards
             .iter()
             .skip(skip_samples)
-            .position(|x| x.date >= time_window[0])
+            .position(|x| x.date > time_window[0])
             .unwrap_or(0);
         let right_pos = rewards
             .iter()
