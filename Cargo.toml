@@ -22,6 +22,7 @@ mockito = "0.31.0"
 chrono = "0.4.22"
 csv = "1.1.6"
 poloto = "15.2.0"
+simple_moving_average = { version = "0.1.2", git = "https://github.com/oskargustafsson/moving_average.git", branch = "master", package = "simple_moving_average" }
 
 [dev-dependencies]
 assert_cmd = "2.0"
