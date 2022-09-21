@@ -1,6 +1,7 @@
 use poloto::num::timestamp::UnixTime;
 use poloto::prelude::*;
 use stake_checker::*;
+use std::cmp::min;
 
 fn main() -> Result<(), ScError> {
     let timezone = &chrono::Utc;
@@ -24,42 +25,32 @@ fn main() -> Result<(), ScError> {
         });
     }
 
-    let mut rewards_time_averaged: Vec<Reward> = vec![];
-    let mut date_time = rewards.first().unwrap().date;
-    let window_days = 8;
-    let mut rew_iter = rewards.iter();
+    let window_step_interval = chrono::Duration::days(1);
+    let window_steps = 8;
+    let window_length = window_step_interval * window_steps;
+    let mut window_start = rewards.first().unwrap().date;
+    let mut window_end = window_start.checked_add_signed(window_length).unwrap();
     let mut skip_samples = 0;
-    while date_time <= rewards.last().unwrap().date {
-        date_time += chrono::Duration::days(1);
-        let time_window = [
-            date_time
-                .checked_add_signed(chrono::Duration::days(-window_days))
-                .unwrap(),
-            date_time,
-        ];
+    let mut rewards_time_averaged: Vec<Reward> = vec![];
+    while window_end <= rewards.last().unwrap().date {
+        window_start += window_step_interval;
+        window_end += window_step_interval;
 
-        for x in rew_iter.by_ref() {
-            if x.date >= time_window[0] {
-                break;
-            }
-            skip_samples += 1;
-        }
-        let left_pos = rewards
+        skip_samples += rewards[skip_samples..]
             .iter()
-            .skip(skip_samples)
-            .position(|x| x.date > time_window[0])
+            .position(|x| x.date > window_start)
             .unwrap_or(0);
-        let right_pos = rewards
+
+        let right_pos = rewards[skip_samples..]
             .iter()
-            .skip(skip_samples)
-            .position(|x| x.date >= time_window[1])
+            .position(|x| x.date >= window_end)
             .unwrap_or(rewards.len());
-        let sum = rewards[left_pos..right_pos]
+        let sum = rewards[skip_samples..min(right_pos + skip_samples, rewards.len())]
             .iter()
             .fold(0, |acc, x| acc + x.balance)
-            / (window_days as u128);
+            / (window_steps as u128);
         rewards_time_averaged.push(Reward {
-            date: date_time,
+            date: window_end,
             balance: sum,
         });
     }
@@ -88,7 +79,7 @@ fn main() -> Result<(), ScError> {
         data_w_dummys.buffered_plot().histogram("Payouts"),
         data_time_averaged
             .buffered_plot()
-            .line(format!("SMA {window_days} days"))
+            .line(format!("SMA {window_steps} days"))
     ));
 
     let plotting_area_size = [1500.0, 800.0];
