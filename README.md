@@ -50,6 +50,15 @@ cargo run --bin plotit > plot.svg
 I suggest tailoring usage to your needs with a script.
 A basic script called `check.sh` is included.
 Is uses the program eog to view the generated plot.
+I invoke it like this
+
+```bash
+./check.sh
+```
+
+... and it gives me a plot like this:
+
+<img src="media/example_plot.svg" width="800">
 
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)

@@ -12,7 +12,44 @@ fn main() -> Result<(), ScError> {
 
     let known_rewards_file = known_rewards_file_from_env();
     let rewards = known_rewards(known_rewards_file)?;
+    let known_stake_changes_file = known_stake_changes_file_from_env();
+    let stake_changes = known_stake_changes(known_stake_changes_file)?;
 
+    // Build the expected reward data set
+    let mut stake_changes_w_dummys: Vec<StakeChange> = vec![];
+    // Add dummy stake changes to get near vertical expectation increases when
+    // stake increases sharply
+    let mut it = stake_changes.iter().peekable();
+    while let Some(stake_change) = it.next() {
+        stake_changes_w_dummys.push(*stake_change);
+        stake_changes_w_dummys.push(StakeChange {
+            timestamp: it
+                .peek()
+                .unwrap_or(&stake_change)
+                .timestamp
+                .checked_add_signed(chrono::Duration::hours(-1))
+                .unwrap_or(stake_change.timestamp),
+            accumulated_amount: stake_change.accumulated_amount,
+        });
+    }
+    let dates_expected_rewards = stake_changes_w_dummys.iter().map(|r| {
+        let d = timezone.from_utc_datetime(&r.timestamp);
+        UnixTime::from(d)
+    });
+
+    const EXPECTED_APR: f64 = 0.14;
+    let expected_rewards = stake_changes_w_dummys
+        .iter()
+        .map(|c| {
+            // Shamelessly hard-coded from https://www.stakingrewards.com/earn/polkadot/
+            let daily_growth_factor: f64 = EXPECTED_APR / 365f64;
+            let dots = (c.accumulated_amount as f64) / f64::powf(10f64, token_decimals as f64);
+            dots * daily_growth_factor
+        })
+        .collect::<Vec<_>>();
+    let data_expected_rewards = dates_expected_rewards.clone().zip(expected_rewards);
+
+    // Add dummy data to rewards to get uniform width histogram staples
     let mut rewards_w_dummys: Vec<Reward> = vec![];
     for reward in &rewards {
         rewards_w_dummys.push(*reward);
@@ -24,9 +61,19 @@ fn main() -> Result<(), ScError> {
             balance: 0,
         });
     }
+    let dates_w_dummys = rewards_w_dummys.iter().map(|r| {
+        let d = timezone.from_utc_datetime(&r.date);
+        UnixTime::from(d)
+    });
+    let balances_w_dummys = rewards_w_dummys
+        .iter()
+        .map(|r| (r.balance as f64) / f64::powf(10f64, token_decimals as f64))
+        .collect::<Vec<_>>();
+    let data_w_dummys = dates_w_dummys.zip(balances_w_dummys);
 
+    // Build time averaged rewards data set
     let window_step_interval = chrono::Duration::days(1);
-    let window_steps = 8;
+    let window_steps = 14;
     let window_length = window_step_interval * window_steps;
     let mut window_start = rewards.first().unwrap().date;
     let mut window_end = window_start.checked_add_signed(window_length).unwrap();
@@ -54,7 +101,6 @@ fn main() -> Result<(), ScError> {
             balance: sum,
         });
     }
-
     let dates_time_averaged = rewards_time_averaged.iter().map(|r| {
         let d = timezone.from_utc_datetime(&r.date);
         UnixTime::from(d)
@@ -65,21 +111,14 @@ fn main() -> Result<(), ScError> {
         .collect::<Vec<_>>();
     let data_time_averaged = dates_time_averaged.zip(balances_time_averaged);
 
-    let dates_w_dummys = rewards_w_dummys.iter().map(|r| {
-        let d = timezone.from_utc_datetime(&r.date);
-        UnixTime::from(d)
-    });
-    let balances_w_dummys = rewards_w_dummys
-        .iter()
-        .map(|r| (r.balance as f64) / f64::powf(10f64, token_decimals as f64))
-        .collect::<Vec<_>>();
-    let data_w_dummys = dates_w_dummys.zip(balances_w_dummys);
-
     let data_for_plot = poloto::data(plots!(
         data_w_dummys.buffered_plot().histogram("Payouts"),
         data_time_averaged
             .buffered_plot()
-            .line(format!("SMA {window_steps} days"))
+            .line(format!("SMA {window_steps} days")),
+        data_expected_rewards
+            .buffered_plot()
+            .line(format!("{:.1}% APR", EXPECTED_APR * 100.))
     ));
 
     let plotting_area_size = [1500.0, 800.0];
