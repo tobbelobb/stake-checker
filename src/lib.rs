@@ -102,6 +102,13 @@ impl From<std::io::Error> for ScError {
     }
 }
 
+pub fn known_stake_changes_file_from_env() -> String {
+    match dotenv::var("KNOWN_STAKE_CHANGES_FILE") {
+        Ok(s) => s,
+        Err(_) => "".into(),
+    }
+}
+
 pub fn known_rewards_file_from_env() -> String {
     match dotenv::var("KNOWN_REWARDS_FILE") {
         Ok(s) => s,
@@ -126,6 +133,15 @@ pub fn token_decimals(file: impl AsRef<Path>) -> Result<TokenDecimals, ScError> 
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone, Copy)]
+pub struct StakeChange {
+    #[serde(deserialize_with = "util::naive_date_time_from_str")]
+    pub timestamp: NaiveDateTime,
+    #[serde(deserialize_with = "util::balance_from_maybe_str")]
+    #[serde(rename(deserialize = "accumulatedAmount"))]
+    pub accumulated_amount: u128,
+}
+
+#[derive(Deserialize, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Reward {
     #[serde(deserialize_with = "util::naive_date_time_from_str")]
     pub date: NaiveDateTime,
@@ -138,6 +154,22 @@ impl poloto::build::unwrapper::Unwrapper for Reward {
     fn unwrap(self) -> (NaiveDateTime, u128) {
         (self.date, self.balance)
     }
+}
+
+pub fn known_stake_changes(file: impl AsRef<Path>) -> Result<Vec<StakeChange>, ScError> {
+    let mut stake_changes: Vec<StakeChange> = vec![];
+
+    if let Ok(true) = fs::try_exists(&file) {
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_path(&file)?;
+        for record in rdr.deserialize() {
+            let stake_change: StakeChange = record?;
+            stake_changes.push(stake_change);
+        }
+    }
+    Ok(stake_changes)
 }
 
 pub fn known_rewards(file: impl AsRef<Path>) -> Result<Vec<Reward>, ScError> {
@@ -154,6 +186,28 @@ pub fn known_rewards(file: impl AsRef<Path>) -> Result<Vec<Reward>, ScError> {
         }
     }
     Ok(rewards)
+}
+
+pub async fn get_stake_changes(
+    subquery_endpoint: &str,
+    polkadot_addr: &str,
+    known_stake_changes_file: impl AsRef<Path>,
+) -> Result<Vec<StakeChange>, ScError> {
+    let olds = known_stake_changes(known_stake_changes_file)?;
+    let latest = query_stake_changes(subquery_endpoint, polkadot_addr).await?;
+
+    if let Some(newest_old) = olds.last() {
+        let mut latest_iter = latest.into_iter();
+        let mut news: Vec<StakeChange> = vec![];
+
+        if latest_iter.any(|x| x.timestamp >= newest_old.timestamp) {
+            for elem in latest_iter {
+                news.push(elem);
+            }
+        }
+        return Ok(news);
+    }
+    Ok(latest)
 }
 
 pub async fn get_staking_rewards(
@@ -184,6 +238,12 @@ impl fmt::Display for Reward {
     }
 }
 
+impl fmt::Display for StakeChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?},{}", self.timestamp, self.accumulated_amount)
+    }
+}
+
 async fn query_staking_rewards(
     subquery_endpoint: &str,
     polkadot_addr: &str,
@@ -206,6 +266,34 @@ async fn query_staking_rewards(
             ret_rewards.push(r);
         }
         return Ok(ret_rewards);
+    };
+
+    Ok(vec![])
+}
+
+async fn query_stake_changes(
+    subquery_endpoint: &str,
+    polkadot_addr: &str,
+) -> Result<Vec<StakeChange>, ScError> {
+    let query = format!(
+        "{{ stakeChanges (last: 100, orderBy: TIMESTAMP_ASC, filter: \
+            {{address : {{equalTo: \"{}\"}}}}) {{\
+              nodes {{ \
+                timestamp \
+                accumulatedAmount \
+              }}}}}}",
+        polkadot_addr
+    );
+
+    let ans = util::subquery(subquery_endpoint, query).await?;
+    let maybe_stake_changes = ans["stakeChanges"]["nodes"].as_array();
+    if let Some(vec) = maybe_stake_changes {
+        let mut ret_stake_changes: Vec<StakeChange> = vec![];
+        for stake_change in vec {
+            let r: StakeChange = serde_json::from_value(stake_change.clone())?;
+            ret_stake_changes.push(r);
+        }
+        return Ok(ret_stake_changes);
     };
 
     Ok(vec![])

@@ -8,8 +8,10 @@ Configure the url of the rpc node, and the polkadot address in an .env file:
 ```bash
 echo "POLKADOT_ADDR=<your_address_here>" >> .env
 echo "RPC_ENDPOINT=https://polkadot-rpc.dwellir.com" >> .env
-echo "SUBQUERY_ENDPOINT=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
+echo "SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum" >> .env
+echo "SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-polkadot" >> .env
 echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
+echo "KNOWN_STAKE_CHANGES_FILE=known_stake_changes.csv" >> .env
 echo "POLKADOT_PROPERTIES_FILE=polkadot_properties.json" >> .env
 ```
 
@@ -30,9 +32,14 @@ Make the same query but by providing a storage method and a storage name
 cargo run --bin stake-checker -- --get_storage Balances TotalIssuance
 ```
 
-Ask the subquery endpoint for a list of your latest staking rewards that were not already listed among your known rewards, and append them onto your file of known rewards
+Ask the subquery rewards endpoint for a list of your latest staking rewards that were not already listed among your known rewards, and append them onto your file of known rewards
 ```bash
 cargo run --bin stake-checker -- --staking_rewards >> known_rewards.csv
+```
+
+Ask the subquery stake changes endpoint for an analogous list
+```bash
+cargo run --bin stake-checker -- --stake_changes >> known_stake_changes.csv
 ```
 
 Plot known staking rewards in an svg file.

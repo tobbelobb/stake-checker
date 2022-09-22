@@ -22,8 +22,15 @@ fn get_valid_env_var(var_name: &str, err: ScError) -> Result<String, ScError> {
     Ok(var)
 }
 
-fn valid_subquery_endpoint_from_env() -> Result<String, ScError> {
-    get_valid_env_var("SUBQUERY_ENDPOINT", ScError::NoSubqueryEndpoint)
+fn valid_subquery_endpoint_stake_changes_from_env() -> Result<String, ScError> {
+    get_valid_env_var(
+        "SUBQUERY_ENDPOINT_STAKE_CHANGES",
+        ScError::NoSubqueryEndpoint,
+    )
+}
+
+fn valid_subquery_endpoint_rewards_from_env() -> Result<String, ScError> {
+    get_valid_env_var("SUBQUERY_ENDPOINT_REWARDS", ScError::NoSubqueryEndpoint)
 }
 
 fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
@@ -100,6 +107,18 @@ async fn main() -> Result<(), ScError> {
                 ),
         )
         .arg(
+            Arg::with_name("stake_changes")
+                .long("stake_changes")
+                .short('c')
+                .takes_value(false)
+                .help(
+                    "Get account's stake changes. \
+                       Will skip those already listed in \
+                       known stake changes file listen in .env. \
+                       Will retrieve at most 100 new stake changes.",
+                ),
+        )
+        .arg(
             Arg::with_name("staking_rewards")
                 .long("staking_rewards")
                 .short('s')
@@ -107,7 +126,7 @@ async fn main() -> Result<(), ScError> {
                 .help(
                     "Get account's staking rewards. \
                        Will skip those already listed in \
-                       known_rewards.csv. \
+                       known_rewards file listed in .env. \
                        Will retrieve at most 100 new rewards.",
                 ),
         )
@@ -117,9 +136,11 @@ async fn main() -> Result<(), ScError> {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
-    let subquery_endpoint = valid_subquery_endpoint_from_env()?;
+    let subquery_endpoint_rewards = valid_subquery_endpoint_rewards_from_env()?;
+    let subquery_endpoint_stake_changes = valid_subquery_endpoint_stake_changes_from_env()?;
     let polkadot_addr = valid_polkadot_addr_from_env()?;
     let known_rewards_file = known_rewards_file_from_env();
+    let known_stake_changes_file = known_stake_changes_file_from_env();
     let polkadot_properties_file = polkadot_properties_file_from_env();
 
     match fs::try_exists(&polkadot_properties_file) {
@@ -135,9 +156,27 @@ async fn main() -> Result<(), ScError> {
     };
     let token_decimals = token_decimals(polkadot_properties_file)?;
 
+    if matches.is_present("stake_changes") {
+        let stake_changes = get_stake_changes(
+            &subquery_endpoint_stake_changes,
+            &polkadot_addr,
+            &known_stake_changes_file,
+        )
+        .await?;
+        print!(
+            "{}",
+            stake_changes
+                .iter()
+                .fold(String::new(), |acc, c| acc + &c.to_string() + "\n")
+        );
+    }
     if matches.is_present("staking_rewards") {
-        let staking_rewards =
-            get_staking_rewards(&subquery_endpoint, &polkadot_addr, &known_rewards_file).await?;
+        let staking_rewards = get_staking_rewards(
+            &subquery_endpoint_rewards,
+            &polkadot_addr,
+            &known_rewards_file,
+        )
+        .await?;
         print!(
             "{}",
             staking_rewards

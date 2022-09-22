@@ -15,6 +15,10 @@ OPTIONS:
     -a, --account_balances
             Get account's balances
 
+    -c, --stake_changes
+            Get account's stake changes. Will skip those already listed in known stake changes file
+            listen in .env. Will retrieve at most 100 new stake changes.
+
     -g, --get_storage <get_storage>...
             Raw state_getStorage rpc call. Provide at least two args: <method>, and <name>. Third is
             optional. The program will try to decode the value before printing, but will print raw
@@ -33,8 +37,8 @@ OPTIONS:
             Call endpoint func rpc_methods
 
     -s, --staking_rewards
-            Get account's staking rewards. Will skip those already listed in known_rewards.csv. Will
-            retrieve at most 100 new rewards.
+            Get account's staking rewards. Will skip those already listed in known_rewards file
+            listed in .env. Will retrieve at most 100 new rewards.
 
     -t, --total_issuance
             Get endpoint chain's total issuance

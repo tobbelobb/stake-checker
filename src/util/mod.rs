@@ -48,11 +48,19 @@ where
     D: Deserializer<'de>,
 {
     let mut s: String = Deserialize::deserialize(deserializer)?;
-    const EXAMPLE_DATE: &str = "2022-02-03T20:34:00.003";
-    while s.len() < EXAMPLE_DATE.len() {
-        s.push('0');
+    if s.chars().any(|c| c == 'T') {
+        const MISSING_SUBSECONDS: &str = "2022-02-03T20:34:00";
+        if s.len() == MISSING_SUBSECONDS.len() {
+            s.push('.');
+        }
+        const WELL_FORMED_DATE: &str = "2022-02-03T20:34:00.003";
+        while s.len() < WELL_FORMED_DATE.len() {
+            s.push('0');
+        }
+        NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S.%3f").map_err(de::Error::custom)
+    } else {
+        NaiveDateTime::parse_from_str(&s, "%s").map_err(de::Error::custom)
     }
-    NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S.%3f").map_err(de::Error::custom)
 }
 
 // https://users.rust-lang.org/t/deserialize-a-number-that-may-be-inside-a-string-serde-json/27318

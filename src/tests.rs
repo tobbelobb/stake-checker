@@ -1,4 +1,4 @@
-use crate::{get_staking_rewards, get_total_issuance, DecimalPointPuttable, Reward};
+use crate::*;
 use chrono::NaiveDate;
 
 use std::io::Write;
@@ -37,6 +37,62 @@ async fn get_total_issuance_happy_case() -> Result<(), Box<dyn std::error::Error
 
     mock.assert();
     assert_eq!(total_issuance, 12283272598261174410);
+    Ok(())
+}
+
+#[test]
+fn read_known_stake_changes() -> Result<(), Box<dyn std::error::Error>> {
+    let _known_stake_changes = known_stake_changes("./src/known_stake_changes_test.csv")?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_stake_changes_happy_case() -> Result<(), Box<dyn std::error::Error>> {
+    // Simulate a subquery server that says three rewards exist
+    let mock = mock("POST", "/")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            "{\"data\":\
+                {\"stakeChanges\":\
+                    {\"nodes\":\
+                        [\
+                            {\"accumulatedAmount\":\"1000000000000\",\"timestamp\":\"1663610000\"},\
+                            {\"accumulatedAmount\":\"2000000000000\",\"timestamp\":\"1663620000\"},\
+                            {\"accumulatedAmount\":\"3000000000000\",\"timestamp\":\"1663630000\"}\
+                        ]\
+                    }\
+                 }\
+             }",
+        )
+        .create();
+    let subquery_endpoint = mockito::server_url();
+
+    // Simulate two known data points
+    let dummy_file_name = testfile::generate_name();
+    let mut f = std::fs::File::create(&dummy_file_name).unwrap();
+    f.write(
+        "2022-09-19T17:53:20.000,1000000000000\n2022-09-19T20:40:00.000,2000000000000\n".as_bytes(),
+    )
+    .expect("Failed to write to tmp file");
+    let _tf = testfile::from_file(&dummy_file_name); // Takes care of deleting tmp file
+
+    let found_stake_changes = get_stake_changes(
+        &subquery_endpoint,
+        "dummyAddress",
+        dummy_file_name.to_str().unwrap(),
+    )
+    .await?;
+
+    mock.assert();
+    assert_eq!(found_stake_changes.len(), 1);
+    assert_eq!(
+        found_stake_changes[0],
+        StakeChange {
+            timestamp: NaiveDate::from_ymd(2022, 9, 19).and_hms(23, 26, 40),
+            accumulated_amount: 3000000000000
+        }
+    );
     Ok(())
 }
 
