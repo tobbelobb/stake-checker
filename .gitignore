@@ -5,5 +5,7 @@ polkadot_metadata.json
 polkadot_properties.json
 known_rewards.csv
 known_rewards_backup.csv
+known_stake_changes.csv
+known_stake_changes_backup.csv
 stdout.log
 pallets_from_metadata
