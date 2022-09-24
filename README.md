@@ -58,7 +58,7 @@ I invoke it like this
 
 ... and it gives me a plot like this:
 
-<img src="media/example_plot.svg" width="800">
+<img src="media/example_plot.svg" width="100%">
 
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)
