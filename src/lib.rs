@@ -1,4 +1,3 @@
-#![feature(fs_try_exists)]
 #[cfg(test)]
 mod cli_tests;
 #[cfg(test)]
@@ -159,7 +158,7 @@ impl poloto::build::unwrapper::Unwrapper for Reward {
 pub fn known_stake_changes(file: impl AsRef<Path>) -> Result<Vec<StakeChange>, ScError> {
     let mut stake_changes: Vec<StakeChange> = vec![];
 
-    if let Ok(true) = fs::try_exists(&file) {
+    if let Ok(true) = &file.as_ref().try_exists() {
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
@@ -175,7 +174,7 @@ pub fn known_stake_changes(file: impl AsRef<Path>) -> Result<Vec<StakeChange>, S
 pub fn known_rewards(file: impl AsRef<Path>) -> Result<Vec<Reward>, ScError> {
     let mut rewards: Vec<Reward> = vec![];
 
-    if let Ok(true) = fs::try_exists(&file) {
+    if let Ok(true) = &file.as_ref().try_exists() {
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)

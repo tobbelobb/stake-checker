@@ -1,8 +1,8 @@
-#![feature(fs_try_exists)]
 use clap::{Arg, Command};
 use log::error;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 use sp_core::crypto::{AccountId32, Ss58AddressFormatRegistry, Ss58Codec};
 
@@ -143,7 +143,7 @@ async fn main() -> Result<(), ScError> {
     let known_stake_changes_file = known_stake_changes_file_from_env();
     let polkadot_properties_file = polkadot_properties_file_from_env();
 
-    match fs::try_exists(&polkadot_properties_file) {
+    match Path::new(&polkadot_properties_file).try_exists() {
         Ok(true) => (),
         _ => {
             println!("Couldn't find {polkadot_properties_file}. Creating and populating it.");
