@@ -23,9 +23,10 @@ pub type Stringifier = fn(&[u8], TokenDecimals) -> Result<String, ScError>;
 pub enum ScError {
     NoEnvFile,
     NoRpcEndpoint,
-    NoSubqueryEndpoint,
+    NoSubqueryEndpointRewards,
+    NoSubqueryEndpointStakeChanges,
     NoPolkadotAddr,
-    InvalidPolkadotAddr,
+    InvalidPolkadotAddr(String),
     NoDataFound,
     IO(std::io::Error),
     Reqwest(reqwest::Error),
@@ -43,14 +44,17 @@ impl fmt::Display for ScError {
             ScError::NoRpcEndpoint => {
                 write!(f, "No RPC_ENDPOINT set in .env")
             }
-            ScError::NoSubqueryEndpoint => {
-                write!(f, "No RPC_ENDPOINT set in .env")
+            ScError::NoSubqueryEndpointRewards => {
+                write!(f, "No SUBQUERY_ENDPOINT_REWARDS set in .env")
+            }
+            ScError::NoSubqueryEndpointStakeChanges => {
+                write!(f, "No SUBQUERY_ENDPOINT_STAKE_CHANGES set in .env")
             }
             ScError::NoPolkadotAddr => {
                 write!(f, "No POLKADOT_ADDR set in .env")
             }
-            ScError::InvalidPolkadotAddr => {
-                write!(f, "Invalid POLKADOT_ADDR set in .env")
+            ScError::InvalidPolkadotAddr(addr) => {
+                write!(f, "Invalid POLKADOT_ADDR set in .env: {addr}")
             }
             ScError::NoDataFound => {
                 write!(f, "Did not find any data. Polkadot address unused?")

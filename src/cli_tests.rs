@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 use std::fs;
+use std::io::Write;
 use std::process::Command;
 
 struct TestDir {
@@ -82,6 +83,64 @@ fn helpful_message_when_envfile_missing() -> Result<(), Box<dyn std::error::Erro
     cmd.arg("--staking_rewards").current_dir(&test_dir.path);
 
     let helpful_message = "Error: Can't find .env file";
+    cmd.assert()
+        .stderr(predicate::str::starts_with(helpful_message));
+
+    Ok(())
+}
+
+#[test]
+fn helpful_message_when_polkadot_addr_missing() -> Result<(), Box<dyn std::error::Error>> {
+    let test_dir = TestDir::new(testfile::generate_name());
+    let mut cmd = Command::cargo_bin("stake-checker").unwrap();
+    cmd.arg("--staking_rewards").current_dir(&test_dir.path);
+
+    let env_filename = test_dir.path.to_str().unwrap().to_owned() + "/.env";
+    let mut env = std::fs::File::create(&env_filename).unwrap();
+    env.write(
+        "POLKADOT_ADDR=<your_address_here>\n\
+         RPC_ENDPOINT=https://polkadot-rpc.dwellir.com\n\
+         SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum\n\
+         SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-polkadot\n\
+         KNOWN_REWARDS_FILE=known_rewards.csv\n\
+         KNOWN_STAKE_CHANGES_FILE=known_stake_changes.csv\n\
+         POLKADOT_PROPERTIES_FILE=polkadot_properties.json\n\
+        "
+        .as_bytes(),
+    )
+    .expect("Failed to write to tmp file");
+    let _tf = testfile::from_file(&env_filename); // Takes care of deleting tmp file
+
+    let helpful_message = "Error: Invalid POLKADOT_ADDR set in .env: <your_address_here>";
+    cmd.assert()
+        .stderr(predicate::str::starts_with(helpful_message));
+
+    Ok(())
+}
+
+#[test]
+fn helpful_message_when_subquery_endpoint_stake_changes_missing(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let test_dir = TestDir::new(testfile::generate_name());
+    let mut cmd = Command::cargo_bin("stake-checker").unwrap();
+    cmd.arg("--staking_rewards").current_dir(&test_dir.path);
+
+    let env_filename = test_dir.path.to_str().unwrap().to_owned() + "/.env";
+    let mut env = std::fs::File::create(&env_filename).unwrap();
+    env.write(
+        "POLKADOT_ADDR=16ZL8yLyXv3V3L3z9ofR1ovFLziyXaN1DPq4yffMAZ9czzBD\n\
+         RPC_ENDPOINT=https://polkadot-rpc.dwellir.com\n\
+         SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum\n\
+         KNOWN_REWARDS_FILE=known_rewards.csv\n\
+         KNOWN_STAKE_CHANGES_FILE=known_stake_changes.csv\n\
+         POLKADOT_PROPERTIES_FILE=polkadot_properties.json\n\
+        "
+        .as_bytes(),
+    )
+    .expect("Failed to write to tmp file");
+    let _tf = testfile::from_file(&env_filename); // Takes care of deleting tmp file
+
+    let helpful_message = "Error: No SUBQUERY_ENDPOINT_STAKE_CHANGES set in .env";
     cmd.assert()
         .stderr(predicate::str::starts_with(helpful_message));
 

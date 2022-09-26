@@ -25,12 +25,15 @@ fn get_valid_env_var(var_name: &str, err: ScError) -> Result<String, ScError> {
 fn valid_subquery_endpoint_stake_changes_from_env() -> Result<String, ScError> {
     get_valid_env_var(
         "SUBQUERY_ENDPOINT_STAKE_CHANGES",
-        ScError::NoSubqueryEndpoint,
+        ScError::NoSubqueryEndpointStakeChanges,
     )
 }
 
 fn valid_subquery_endpoint_rewards_from_env() -> Result<String, ScError> {
-    get_valid_env_var("SUBQUERY_ENDPOINT_REWARDS", ScError::NoSubqueryEndpoint)
+    get_valid_env_var(
+        "SUBQUERY_ENDPOINT_REWARDS",
+        ScError::NoSubqueryEndpointRewards,
+    )
 }
 
 fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
@@ -39,12 +42,12 @@ fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
 
 fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
     let addr = get_valid_env_var("POLKADOT_ADDR", ScError::NoPolkadotAddr)?;
-    let account_id = AccountId32::from_string(&addr)?;
+    let account_id =
+        AccountId32::from_string(&addr).map_err(|_| ScError::InvalidPolkadotAddr(addr.clone()))?;
     let back_to_string =
         account_id.to_ss58check_with_version(Ss58AddressFormatRegistry::PolkadotAccount.into());
     if addr != back_to_string {
-        error!("Invalid POLKADOT_ADDR provided in .env file.");
-        return Err(ScError::InvalidPolkadotAddr);
+        return Err(ScError::InvalidPolkadotAddr(addr));
     }
     Ok(addr)
 }
@@ -148,7 +151,7 @@ async fn main() -> Result<(), ScError> {
     match Path::new(&polkadot_properties_file).try_exists() {
         Ok(true) => (),
         _ => {
-            println!("Couldn't find {polkadot_properties_file}. Creating and populating it.");
+            eprintln!("Couldn't find {polkadot_properties_file}. Creating and populating it.");
             fs::write(
                 &polkadot_properties_file,
                 system_properties(&rpc_endpoint).await?,
