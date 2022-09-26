@@ -132,7 +132,10 @@ async fn main() -> Result<(), ScError> {
         )
         .get_matches();
 
-    dotenv::dotenv().ok();
+    match dotenv::dotenv() {
+        Ok(_) => (),
+        Err(_) => return Err(ScError::NoEnvFile),
+    }
 
     let rpc_endpoint = valid_rpc_endpoint_from_env()?;
     let subquery_endpoint_rewards = valid_subquery_endpoint_rewards_from_env()?;

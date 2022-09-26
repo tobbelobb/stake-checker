@@ -20,8 +20,8 @@ pub type TokenDecimals = usize;
 pub type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
 pub type Stringifier = fn(&[u8], TokenDecimals) -> Result<String, ScError>;
 
-#[derive(Debug)]
 pub enum ScError {
+    NoEnvFile,
     NoRpcEndpoint,
     NoSubqueryEndpoint,
     NoPolkadotAddr,
@@ -55,6 +55,7 @@ impl fmt::Display for ScError {
             ScError::NoDataFound => {
                 write!(f, "Did not find any data. Polkadot address unused?")
             }
+            ScError::NoEnvFile => write!(f, "Can't find .env file."),
             ScError::IO(err) => write!(f, "Error while flushing the file {}", err),
             ScError::Reqwest(err) => write!(f, "Error while fetching data {}", err),
             ScError::Crypto(err) => write!(f, "Cryptographic error {}", err),
@@ -62,6 +63,12 @@ impl fmt::Display for ScError {
             ScError::Json(err) => write!(f, "Json error {}", err),
             ScError::Csv(err) => write!(f, "Comma separated value error {}", err),
         }
+    }
+}
+
+impl fmt::Debug for ScError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Self as fmt::Display>::fmt(self, f)
     }
 }
 

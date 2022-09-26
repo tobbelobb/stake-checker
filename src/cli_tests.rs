@@ -1,6 +1,24 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use std::process::Command; // Run programs
+use std::fs;
+use std::process::Command;
+
+struct TestDir {
+    path: std::path::PathBuf,
+}
+
+impl TestDir {
+    fn new(path: std::path::PathBuf) -> Self {
+        let _ignore = fs::create_dir(&path);
+        TestDir { path }
+    }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.path);
+    }
+}
 
 #[test]
 fn help_text_works() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,6 +71,19 @@ OPTIONS:
     }
     let mut cmd2 = Command::cargo_bin("stake-checker")?;
     cmd2.assert().stderr(predicate::str::starts_with(help_text));
+
+    Ok(())
+}
+
+#[test]
+fn helpful_message_when_envfile_missing() -> Result<(), Box<dyn std::error::Error>> {
+    let test_dir = TestDir::new(testfile::generate_name());
+    let mut cmd = Command::cargo_bin("stake-checker").unwrap();
+    cmd.arg("--staking_rewards").current_dir(&test_dir.path);
+
+    let helpful_message = "Error: Can't find .env file";
+    cmd.assert()
+        .stderr(predicate::str::starts_with(helpful_message));
 
     Ok(())
 }
