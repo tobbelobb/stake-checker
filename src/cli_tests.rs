@@ -111,7 +111,7 @@ fn helpful_message_when_polkadot_addr_missing() -> Result<(), Box<dyn std::error
     .expect("Failed to write to tmp file");
     let _tf = testfile::from_file(&env_filename); // Takes care of deleting tmp file
 
-    let helpful_message = "Error: Invalid POLKADOT_ADDR set in .env: <your_address_here>";
+    let helpful_message = "Error: Invalid POLKADOT_ADDR found in .env: <your_address_here>";
     cmd.assert()
         .stderr(predicate::str::starts_with(helpful_message));
 

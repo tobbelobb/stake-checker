@@ -1,5 +1,4 @@
 use clap::{Arg, Command};
-use log::error;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -8,40 +7,33 @@ use sp_core::crypto::{AccountId32, Ss58AddressFormatRegistry, Ss58Codec};
 
 use stake_checker::*;
 
-fn get_valid_env_var(var_name: &str, err: ScError) -> Result<String, ScError> {
-    let var = match dotenv::var(var_name) {
+fn get_valid_env_var(var_name: &str) -> Result<String, ScError> {
+    let var = match dotenv::var(&var_name) {
         Ok(s) => s,
         Err(_) => "".into(),
     };
 
     if var.is_empty() {
-        error!("No {var_name} provided in .env file.");
-        return Err(err);
+        return Err(ScError::MissingEnvVariable(var_name.into()));
     }
 
     Ok(var)
 }
 
 fn valid_subquery_endpoint_stake_changes_from_env() -> Result<String, ScError> {
-    get_valid_env_var(
-        "SUBQUERY_ENDPOINT_STAKE_CHANGES",
-        ScError::NoSubqueryEndpointStakeChanges,
-    )
+    get_valid_env_var("SUBQUERY_ENDPOINT_STAKE_CHANGES")
 }
 
 fn valid_subquery_endpoint_rewards_from_env() -> Result<String, ScError> {
-    get_valid_env_var(
-        "SUBQUERY_ENDPOINT_REWARDS",
-        ScError::NoSubqueryEndpointRewards,
-    )
+    get_valid_env_var("SUBQUERY_ENDPOINT_REWARDS")
 }
 
 fn valid_rpc_endpoint_from_env() -> Result<String, ScError> {
-    get_valid_env_var("RPC_ENDPOINT", ScError::NoRpcEndpoint)
+    get_valid_env_var("RPC_ENDPOINT")
 }
 
 fn valid_polkadot_addr_from_env() -> Result<String, ScError> {
-    let addr = get_valid_env_var("POLKADOT_ADDR", ScError::NoPolkadotAddr)?;
+    let addr = get_valid_env_var("POLKADOT_ADDR")?;
     let account_id =
         AccountId32::from_string(&addr).map_err(|_| ScError::InvalidPolkadotAddr(addr.clone()))?;
     let back_to_string =
