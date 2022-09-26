@@ -14,7 +14,7 @@ use csv::ReaderBuilder;
 use frame_metadata::RuntimeMetadataPrefixed;
 use parity_scale_codec::Decode;
 use serde::Deserialize;
-use sp_core::{crypto::AccountId32, crypto::PublicError, crypto::Ss58Codec, hashing};
+use sp_core::{crypto::AccountId32, crypto::Ss58Codec, hashing};
 pub type TokenDecimals = usize;
 
 pub type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
@@ -27,7 +27,6 @@ pub enum ScError {
     NoDataFound,
     IO(std::io::Error),
     Reqwest(reqwest::Error),
-    Crypto(PublicError),
     Codec(parity_scale_codec::Error),
     Json(serde_json::Error),
     Csv(csv::Error),
@@ -50,7 +49,6 @@ impl fmt::Display for ScError {
             ScError::NoEnvFile => write!(f, "Can't find .env file."),
             ScError::IO(err) => write!(f, "Error while flushing the file {}", err),
             ScError::Reqwest(err) => write!(f, "Error while fetching data {}", err),
-            ScError::Crypto(err) => write!(f, "Cryptographic error {}", err),
             ScError::Codec(err) => write!(f, "Codec error {}", err),
             ScError::Json(err) => write!(f, "Json error {}", err),
             ScError::Csv(err) => write!(f, "Comma separated value error {}", err),
@@ -79,12 +77,6 @@ impl From<serde_json::Error> for ScError {
 impl From<parity_scale_codec::Error> for ScError {
     fn from(err: parity_scale_codec::Error) -> ScError {
         ScError::Codec(err)
-    }
-}
-
-impl From<PublicError> for ScError {
-    fn from(err: PublicError) -> ScError {
-        ScError::Crypto(err)
     }
 }
 
