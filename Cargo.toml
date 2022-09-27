@@ -21,8 +21,14 @@ mockito = "0.31.0"
 chrono = "0.4.22"
 csv = "1.1.6"
 poloto = "15.2.0"
+anyhow = "1.0.65"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "2.1"
 testfile = "0.0.4"
+
+[workspace.metadata.dylint]
+libraries = [
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/*/*" },
+]

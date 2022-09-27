@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{AppSettings, Arg, Command};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -50,7 +50,7 @@ async fn main() -> Result<(), ScError> {
         .version("1.0")
         .author("Torbjørn L. <tobben@fastmail.fm>")
         .about("Check Polkadot Staking Rewards")
-        .setting(clap::AppSettings::ArgRequiredElseHelp)
+        .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("rpc_methods")
                 .long("rpc_methods")
@@ -144,11 +144,8 @@ async fn main() -> Result<(), ScError> {
         Ok(true) => (),
         _ => {
             eprintln!("Couldn't find {polkadot_properties_file}. Creating and populating it.");
-            fs::write(
-                &polkadot_properties_file,
-                system_properties(&rpc_endpoint).await?,
-            )
-            .expect("Unable to write file");
+            let polka_props = system_properties(&rpc_endpoint).await?;
+            fs::write(&polkadot_properties_file, polka_props).expect("Unable to write file");
         }
     };
     let token_decimals = token_decimals(polkadot_properties_file)?;
@@ -185,16 +182,18 @@ async fn main() -> Result<(), ScError> {
         return rpc_methods(&rpc_endpoint).await;
     }
     if matches.is_present("metadata") {
-        println!("{}", state_get_metadata(&rpc_endpoint).await?);
+        let metadata = state_get_metadata(&rpc_endpoint).await?;
+        println!("{metadata}");
     }
     if matches.is_present("properties") {
-        println!("{}", system_properties(&rpc_endpoint).await?);
+        let sys_props = system_properties(&rpc_endpoint).await?;
+        println!("{sys_props}");
     }
     if matches.is_present("total_issuance") {
         let total_issuance = get_total_issuance(&rpc_endpoint).await?;
         println!(
             "Total issued {} DOT",
-            (&total_issuance.to_string()).with_decimal_point(token_decimals)
+            total_issuance.with_decimal_point(token_decimals)
         );
     }
     if matches.is_present("account_balances") {
@@ -238,8 +237,8 @@ async fn main() -> Result<(), ScError> {
         let stringifier = known_stringifiers.get(&key);
         match stringifier {
             Some(stringify) => {
-                println!("Using formatter");
-                println!("{}", stringify(bytes.as_slice(), token_decimals)?);
+                let stringified = stringify(bytes.as_slice(), token_decimals)?;
+                println!("{stringified}");
             }
             None => println!("{:?}", bytes),
         }

@@ -2,15 +2,16 @@
 mod util_tests;
 
 use chrono::NaiveDateTime;
-use serde::{de, Deserialize, Deserializer};
-use serde_json::json;
+use serde::{de, Deserialize, Deserializer, Serialize};
+use serde_json::{json, Value};
 
-pub async fn rpc<Params: serde::Serialize>(
+pub async fn rpc<Params: Serialize>(
     rpc_endpoint: &str,
     method: &str,
     params: Params,
-) -> Result<serde_json::Value, reqwest::Error> {
+) -> Result<Value, reqwest::Error> {
     let client = reqwest::Client::new();
+
     let resp = client
         .post(rpc_endpoint)
         .json(&json! {{
@@ -22,14 +23,14 @@ pub async fn rpc<Params: serde::Serialize>(
         .send()
         .await?;
 
-    let mut ans: serde_json::Value = resp.json().await?;
+    let mut ans: Value = resp.json().await?;
     Ok(ans["result"].take())
 }
 
-pub async fn subquery<Params: serde::Serialize>(
+pub async fn subquery<Params: Serialize>(
     endpoint: &str,
     query: Params,
-) -> Result<serde_json::Value, reqwest::Error> {
+) -> Result<Value, reqwest::Error> {
     let client = reqwest::Client::new();
     let resp = client
         .post(endpoint)
@@ -38,7 +39,7 @@ pub async fn subquery<Params: serde::Serialize>(
         }})
         .send()
         .await?;
-    let mut ans: serde_json::Value = resp.json().await?;
+    let mut ans: Value = resp.json().await?;
     Ok(ans["data"].take())
 }
 
@@ -70,12 +71,13 @@ where
     D: Deserializer<'de>,
 {
     use serde::de::Error;
-    let v = serde_json::Value::deserialize(deserializer)?;
-    let n = v
+    let v = Value::deserialize(deserializer)?;
+    let an_u64 = v
         .as_u64()
         .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-        .ok_or_else(|| D::Error::custom("non-integer"))?
+        .ok_or_else(|| D::Error::custom("non-integer"))?;
+    let an_u128 = an_u64
         .try_into()
         .map_err(|_| D::Error::custom("overflow"))?;
-    Ok(n)
+    Ok(an_u128)
 }

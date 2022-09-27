@@ -7,12 +7,14 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
+use anyhow::Context;
 use chrono::NaiveDateTime;
-use csv::ReaderBuilder;
 use frame_metadata::RuntimeMetadataPrefixed;
 use parity_scale_codec::Decode;
+use parity_scale_codec::Error as ParityScaleError;
 use serde::Deserialize;
 use sp_core::{crypto::AccountId32, crypto::Ss58Codec, hashing};
+
 pub type TokenDecimals = usize;
 
 pub type PolkadotAccountInfo = pallet_system::AccountInfo<u32, pallet_balances::AccountData<u128>>;
@@ -25,9 +27,10 @@ pub enum ScError {
     NoDataFound,
     IO(std::io::Error),
     Reqwest(reqwest::Error),
-    Codec(parity_scale_codec::Error),
+    Codec(ParityScaleError),
     Json(serde_json::Error),
     Csv(csv::Error),
+    Anyhow(anyhow::Error),
 }
 
 impl std::error::Error for ScError {}
@@ -50,6 +53,7 @@ impl fmt::Display for ScError {
             ScError::Codec(err) => write!(f, "Codec error {}", err),
             ScError::Json(err) => write!(f, "Json error {}", err),
             ScError::Csv(err) => write!(f, "Comma separated value error {}", err),
+            ScError::Anyhow(err) => write!(f, "Anyhow err: {err}"),
         }
     }
 }
@@ -57,6 +61,12 @@ impl fmt::Display for ScError {
 impl fmt::Debug for ScError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <Self as fmt::Display>::fmt(self, f)
+    }
+}
+
+impl From<anyhow::Error> for ScError {
+    fn from(err: anyhow::Error) -> ScError {
+        ScError::Anyhow(err)
     }
 }
 
@@ -72,8 +82,8 @@ impl From<serde_json::Error> for ScError {
     }
 }
 
-impl From<parity_scale_codec::Error> for ScError {
-    fn from(err: parity_scale_codec::Error) -> ScError {
+impl From<ParityScaleError> for ScError {
+    fn from(err: ParityScaleError) -> ScError {
         ScError::Codec(err)
     }
 }
@@ -112,8 +122,9 @@ pub fn polkadot_properties_file_from_env() -> String {
 }
 
 pub fn token_decimals(file: impl AsRef<Path>) -> Result<TokenDecimals, ScError> {
-    let mut polkadot_properties: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(file)?)?;
+    let prop_str =
+        fs::read_to_string(file).with_context(|| "could not open polkadot properties file")?;
+    let mut polkadot_properties: serde_json::Value = serde_json::from_str(&prop_str)?;
     Ok(polkadot_properties["tokenDecimals"]
         .take()
         .as_u64()
@@ -148,7 +159,7 @@ pub fn known_stake_changes(file: impl AsRef<Path>) -> Result<Vec<StakeChange>, S
     let mut stake_changes: Vec<StakeChange> = vec![];
 
     if let Ok(true) = &file.as_ref().try_exists() {
-        let mut rdr = ReaderBuilder::new()
+        let mut rdr = csv::ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
             .from_path(&file)?;
@@ -164,7 +175,7 @@ pub fn known_rewards(file: impl AsRef<Path>) -> Result<Vec<Reward>, ScError> {
     let mut rewards: Vec<Reward> = vec![];
 
     if let Ok(true) = &file.as_ref().try_exists() {
-        let mut rdr = ReaderBuilder::new()
+        let mut rdr = csv::ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
             .from_path(&file)?;
