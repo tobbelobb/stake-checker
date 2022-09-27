@@ -1,6 +1,4 @@
 #[cfg(test)]
-mod cli_tests;
-#[cfg(test)]
 mod tests;
 
 mod util;

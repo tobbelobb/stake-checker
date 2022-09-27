@@ -22,6 +22,12 @@ fn check_with_decimal_point_u128() {
     assert_eq!(1234567890.with_decimal_point(10), "0.1234567890");
 }
 
+#[test]
+fn read_known_stake_changes() -> Result<(), Box<dyn std::error::Error>> {
+    let _known_stake_changes = known_stake_changes("./src/known_stake_changes_test.csv")?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn get_total_issuance_happy_case() -> Result<(), Box<dyn std::error::Error>> {
     let mock = mock("POST", "/")
@@ -37,12 +43,6 @@ async fn get_total_issuance_happy_case() -> Result<(), Box<dyn std::error::Error
 
     mock.assert();
     assert_eq!(total_issuance, 12283272598261174410);
-    Ok(())
-}
-
-#[test]
-fn read_known_stake_changes() -> Result<(), Box<dyn std::error::Error>> {
-    let _known_stake_changes = known_stake_changes("./src/known_stake_changes_test.csv")?;
     Ok(())
 }
 

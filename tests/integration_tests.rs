@@ -147,18 +147,16 @@ fn helpful_message_when_subquery_endpoint_stake_changes_missing(
     Ok(())
 }
 
-// Would call the real rpc node.
-// We don't want that.
-// And we don't want a big complicated simulation of an rpc node either.
-// Haven't found an elegant solution yet.
-//#[test]
-//fn total_issued_works() -> Result<(), Box<dyn std::error::Error>> {
-//    let mut cmd = Command::cargo_bin("stake-checker")?;
-//    cmd.arg("--total_issuance");
-//
-//    cmd.assert().stdout(predicate::str::is_match(
-//        "Total issued \\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\.\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d DOT\n",
-//    )?);
-//
-//    Ok(())
-//}
+// Call the real rpc node.
+#[test]
+#[ignore]
+fn total_issued_works_via_real_rpc_node() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("stake-checker")?;
+    cmd.arg("--total_issuance");
+
+    cmd.assert().stdout(predicate::str::is_match(
+        "Total issued \\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\.\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d DOT\n",
+    )?);
+
+    Ok(())
+}
