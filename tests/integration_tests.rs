@@ -97,7 +97,7 @@ fn helpful_message_when_polkadot_addr_missing() -> Result<(), Box<dyn std::error
 
     let env_filename = test_dir.path.to_str().unwrap().to_owned() + "/.env";
     let mut env = std::fs::File::create(&env_filename).unwrap();
-    env.write(
+    env.write_all(
         "POLKADOT_ADDR=<your_address_here>\n\
          RPC_ENDPOINT=https://polkadot-rpc.dwellir.com\n\
          SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum\n\
@@ -127,7 +127,7 @@ fn helpful_message_when_subquery_endpoint_stake_changes_missing(
 
     let env_filename = test_dir.path.to_str().unwrap().to_owned() + "/.env";
     let mut env = std::fs::File::create(&env_filename).unwrap();
-    env.write(
+    env.write_all(
         "POLKADOT_ADDR=16ZL8yLyXv3V3L3z9ofR1ovFLziyXaN1DPq4yffMAZ9czzBD\n\
          RPC_ENDPOINT=https://polkadot-rpc.dwellir.com\n\
          SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum\n\
@@ -154,9 +154,10 @@ fn total_issued_works_via_real_rpc_node() -> Result<(), Box<dyn std::error::Erro
     let mut cmd = Command::cargo_bin("stake-checker")?;
     cmd.arg("--total_issuance");
 
-    cmd.assert().stdout(predicate::str::is_match(
+    let pred = predicate::str::is_match(
         "Total issued \\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\.\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d DOT\n",
-    )?);
+    )?;
+    cmd.assert().stdout(pred);
 
     Ok(())
 }

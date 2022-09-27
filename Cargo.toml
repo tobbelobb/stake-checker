@@ -30,5 +30,11 @@ testfile = "0.0.4"
 
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/trailofbits/dylint", pattern = "examples/*/*" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/general/await_holding_span_guard" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/general/crate_wide_allow" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/general/env_cargo_path" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/general/non_thread_safe_call_in_test" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/general/redundant_reference" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/restriction/*" },
+    { git = "https://github.com/trailofbits/dylint", pattern = "examples/testing/*" },
 ]
