@@ -60,6 +60,12 @@ I invoke it like this
 
 <img src="media/example_plot.svg" width="100%">
 
+### Linting
+```bash
+cargo dylint --all --workspace
+cargo dylint --all --workspace -- --test integration_tests
+```
+
 ### Reading List
  - [Querying Substrate Storage Via rpc](https://www.shawntabrizi.com/substrate/querying-substrate-storage-via-rpc/)
  - [Transparent Keys in Substrate](https://www.shawntabrizi.com/substrate/transparent-keys-in-substrate/)
