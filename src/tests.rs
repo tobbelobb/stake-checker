@@ -116,17 +116,17 @@ async fn get_staking_rewards_happy_case() -> Result<(), Box<dyn std::error::Erro
              }",
         )
         .create();
-    let subquery_endpoint = mockito::server_url();
+    let subquery_endpoint = SubqueryEndpoint::new(mockito::server_url());
 
     // Simulate two known data points
     let dummy_file_name = testfile::generate_name();
     let mut f = std::fs::File::create(&dummy_file_name).unwrap();
-    f.write("2015-06-10T08:07:06.011,10\n2015-06-11T08:07:06.011,10\n".as_bytes())
+    f.write("2015-06-10T08:07:06.011,9\n2015-06-11T08:07:06.011,10\n".as_bytes())
         .expect("Failed to write to tmp file");
     let _tf = testfile::from_file(&dummy_file_name);
 
     let found_rewards = get_staking_rewards(
-        &subquery_endpoint,
+        subquery_endpoint,
         "dummyAddress",
         dummy_file_name.to_str().unwrap(),
     )

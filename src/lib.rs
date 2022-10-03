@@ -143,8 +143,10 @@ pub struct StakeChange {
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Reward {
     #[serde(deserialize_with = "util::naive_date_time_from_str")]
+    #[serde(alias = "timestamp")]
     pub date: NaiveDateTime,
     #[serde(deserialize_with = "util::balance_from_maybe_str")]
+    #[serde(alias = "amount")]
     pub balance: u128,
 }
 
@@ -210,7 +212,7 @@ pub async fn get_stake_changes(
 }
 
 pub async fn get_staking_rewards(
-    subquery_endpoint: &str,
+    subquery_endpoint: SubqueryEndpoint,
     polkadot_addr: &str,
     known_rewards_file: impl AsRef<Path>,
 ) -> Result<Vec<Reward>, ScError> {
@@ -243,21 +245,56 @@ impl fmt::Display for StakeChange {
     }
 }
 
+pub struct SubqueryEndpoint {
+    url: String,
+    query: (String, String),
+    query_root: String,
+}
+
+impl SubqueryEndpoint {
+    pub fn new(url: String) -> Self {
+        let query = if url.contains("nova-polkadot") {
+            (
+                "{ stakeChanges (filter: {address: { equalTo: \"".into(),
+                "\" }, type: {equalTo:\"rewarded\"}} orderBy: TIMESTAMP_ASC, last: 100) { \
+                  nodes { amount timestamp }}}"
+                    .into(),
+            )
+        } else {
+            (
+                "{ stakingRewards (last: 100, orderBy: DATE_ASC, \
+                   filter: { accountId : {equalTo : \""
+                    .into(),
+                "\"}}) { nodes { balance date }}}".into(),
+            )
+        };
+        let query_root = if url.contains("nova-polkadot") {
+            "stakeChanges".into()
+        } else {
+            "stakingRewards".into()
+        };
+
+        SubqueryEndpoint {
+            url,
+            query,
+            query_root,
+        }
+    }
+
+    pub fn get_query(&self, polkadot_addr: &str) -> String {
+        self.query.0.clone() + polkadot_addr + &self.query.1
+    }
+}
+
 async fn query_staking_rewards(
-    subquery_endpoint: &str,
+    subquery_endpoint: SubqueryEndpoint,
     polkadot_addr: &str,
 ) -> Result<Vec<Reward>, ScError> {
-    let query = format!(
-        "{{ stakingRewards (last: 100, orderBy: DATE_ASC, filter: \
-            {{accountId : {{equalTo : \"{}\"}}}}) {{ \
-              nodes {{ \
-                balance \
-                date \
-              }}}}}}",
-        polkadot_addr
-    );
-    let ans = util::subquery(subquery_endpoint, query).await?;
-    let maybe_rewards = ans["stakingRewards"]["nodes"].as_array();
+    let query = subquery_endpoint.get_query(polkadot_addr);
+
+    let ans = util::subquery(&subquery_endpoint.url, query).await?;
+    let maybe_rewards = ans[subquery_endpoint.query_root]["nodes"].as_array();
+
     if let Some(vec) = maybe_rewards {
         let mut ret_rewards: Vec<Reward> = Vec::new();
         for reward in vec {

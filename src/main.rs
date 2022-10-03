@@ -164,13 +164,9 @@ async fn main() -> Result<(), ScError> {
                 .fold(String::new(), |acc, c| acc + &c.to_string() + "\n")
         );
     }
+    let sr = SubqueryEndpoint::new(subquery_endpoint_rewards);
     if matches.is_present("staking_rewards") {
-        let staking_rewards = get_staking_rewards(
-            &subquery_endpoint_rewards,
-            &polkadot_addr,
-            &known_rewards_file,
-        )
-        .await?;
+        let staking_rewards = get_staking_rewards(sr, &polkadot_addr, &known_rewards_file).await?;
         print!(
             "{}",
             staking_rewards
