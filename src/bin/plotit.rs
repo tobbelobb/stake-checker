@@ -37,11 +37,12 @@ fn main() -> Result<(), ScError> {
         UnixTime::from(d)
     });
 
-    const EXPECTED_APR: f64 = 0.14;
+    // Shamelessly hard-coded from historical rewards rate on Oct 5, 2022
+    // https://staking.polkadot.network/#/overview
+    const EXPECTED_APR: f64 = 0.1486;
     let expected_rewards = stake_changes_w_dummys
         .iter()
         .map(|c| {
-            // Shamelessly hard-coded from https://www.stakingrewards.com/earn/polkadot/
             let daily_growth_factor: f64 = EXPECTED_APR / 365f64;
             let dots = (c.accumulated_amount as f64) / f64::powf(10f64, token_decimals as f64);
             dots * daily_growth_factor
