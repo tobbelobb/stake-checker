@@ -101,7 +101,7 @@ fn helpful_message_when_polkadot_addr_missing() -> Result<(), Box<dyn std::error
         "POLKADOT_ADDR=<your_address_here>\n\
          RPC_ENDPOINT=https://polkadot-rpc.dwellir.com\n\
          SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/subquery/tutorial---staking-sum\n\
-         SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-polkadot\n\
+         SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-wallet-polkadot\n\
          KNOWN_REWARDS_FILE=known_rewards.csv\n\
          KNOWN_STAKE_CHANGES_FILE=known_stake_changes.csv\n\
          POLKADOT_PROPERTIES_FILE=polkadot_properties.json\n\

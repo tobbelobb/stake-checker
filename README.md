@@ -8,8 +8,8 @@ Configure the url of the rpc node, and the polkadot address in an .env file:
 ```bash
 echo "POLKADOT_ADDR=<your_address_here>" >> .env
 echo "RPC_ENDPOINT=https://polkadot-rpc.dwellir.com" >> .env
-echo "SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/nova-wallet/nova-polkadot" >> .env
-echo "SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-polkadot" >> .env
+echo "SUBQUERY_ENDPOINT_REWARDS=https://api.subquery.network/sq/nova-wallet/nova-wallet-polkadot" >> .env
+echo "SUBQUERY_ENDPOINT_STAKE_CHANGES=https://api.subquery.network/sq/nova-wallet/nova-wallet-polkadot" >> .env
 echo "KNOWN_REWARDS_FILE=known_rewards.csv" >> .env
 echo "KNOWN_STAKE_CHANGES_FILE=known_stake_changes.csv" >> .env
 echo "POLKADOT_PROPERTIES_FILE=polkadot_properties.json" >> .env

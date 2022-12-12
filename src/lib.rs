@@ -253,7 +253,7 @@ pub struct SubqueryEndpoint {
 
 impl SubqueryEndpoint {
     pub fn new(url: String) -> Self {
-        let query = if url.contains("nova-polkadot") {
+        let query = if url.contains("nova-wallet-polkadot") {
             (
                 "{ stakeChanges (filter: {address: { equalTo: \"".into(),
                 "\" }, type: {equalTo:\"rewarded\"}} orderBy: TIMESTAMP_ASC, last: 100) { \
@@ -268,7 +268,7 @@ impl SubqueryEndpoint {
                 "\"}}) { nodes { balance date }}}".into(),
             )
         };
-        let query_root = if url.contains("nova-polkadot") {
+        let query_root = if url.contains("nova-wallet-polkadot") {
             "stakeChanges".into()
         } else {
             "stakingRewards".into()
