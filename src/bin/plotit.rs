@@ -2,6 +2,7 @@ use poloto::num::timestamp::UnixTime;
 use poloto::prelude::*;
 use stake_checker::*;
 use std::cmp::min;
+use ndarray::Array;
 
 fn main() -> Result<(), ScError> {
     let timezone = &chrono::Utc;
@@ -37,18 +38,27 @@ fn main() -> Result<(), ScError> {
         UnixTime::from(d)
     });
 
-    // Shamelessly hard-coded from historical rewards rate on Oct 5, 2022
+    // Shamelessly hard-coded from historical rewards rate on Dec 28, 2022
     // https://staking.polkadot.network/#/overview
-    const EXPECTED_APR: f64 = 0.1486;
-    let expected_rewards = stake_changes_w_dummys
-        .iter()
-        .map(|c| {
-            let daily_growth_factor: f64 = EXPECTED_APR / 365f64;
-            let dots = (c.accumulated_amount as f64) / f64::powf(10f64, token_decimals as f64);
-            dots * daily_growth_factor
-        })
+    const EXPECTED_APR: f64 = 0.1566;
+    const RANGE_D_APR: f64 = 0.05;
+    const NUMPOINTS_APR: usize = 3;
+    const START_APR: f64 = EXPECTED_APR - RANGE_D_APR;
+    const END_APR: f64 = EXPECTED_APR + RANGE_D_APR;
+    let aprs = Array::linspace(START_APR, END_APR, NUMPOINTS_APR);
+
+
+    let expected_rewards = aprs.iter().map(|apr|
+            stake_changes_w_dummys
+            .iter()
+            .map(|c| {
+                let daily_growth_factor: f64 = apr / 365f64;
+                let dots = (c.accumulated_amount as f64) / f64::powf(10f64, token_decimals as f64);
+                dots * daily_growth_factor
+            }).collect::<Vec<_>>())
         .collect::<Vec<_>>();
-    let data_expected_rewards = dates_expected_rewards.clone().zip(expected_rewards);
+    let data_expected_rewards: Vec<_> = expected_rewards.iter().map(|e| dates_expected_rewards.clone().zip(e)).collect();
+
 
     // Add dummy data to rewards to get uniform width histogram staples
     let mut rewards_w_dummys: Vec<Reward> = vec![];
@@ -117,9 +127,15 @@ fn main() -> Result<(), ScError> {
         data_time_averaged
             .buffered_plot()
             .line(format!("SMA {window_steps} days")),
-        data_expected_rewards
+        data_expected_rewards[0].clone()
             .buffered_plot()
-            .line(format!("{:.1}% APR", EXPECTED_APR * 100.))
+            .line(format!("{:.1}% APR", aprs[0] * 100.)),
+        data_expected_rewards[1].clone()
+            .buffered_plot()
+            .line(format!("{:.1}% APR", aprs[1] * 100.)),
+        data_expected_rewards[2].clone()
+            .buffered_plot()
+            .line(format!("{:.1}% APR", aprs[2] * 100.))
     ));
 
     let plotting_area_size = [1500.0, 800.0];
